@@ -12,6 +12,17 @@ export class PlayerController {
         this._prevRight = false;
     }
 
+    /**
+     * Snapshot the current mouse-button state into the rising-edge
+     * trackers. Call this right after construction when a button is
+     * already held (e.g. the click that dismissed the main menu) to
+     * avoid an immediate phantom shot on the first update().
+     */
+    syncInputState() {
+        this._prevLeft  = this.input.mouse.left;
+        this._prevRight = this.input.mouse.right;
+    }
+
     update(dt) {
         const p = this.player;
         if (!p.active || p.isInHole) return;
