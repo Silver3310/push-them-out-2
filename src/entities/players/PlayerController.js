@@ -1,11 +1,13 @@
 import { GameConfig } from '../../core/GameConfig.js';
 import { eventBus }   from '../../events/EventBus.js';
 import { GameEvents } from '../../events/GameEvents.js';
+import { Bullet }    from '../objects/Bullet.js';
 
 export class PlayerController {
-    constructor(player, inputHandler) {
+    constructor(player, inputHandler, gameRef = null) {
         this.player = player;
         this.input  = inputHandler;
+        this.game   = gameRef;
         this._prevLeft  = false;
         this._prevRight = false;
     }
@@ -31,14 +33,22 @@ export class PlayerController {
     }
 
     _shoot() {
+        if (!this.game) return; // No game reference, can't shoot
+        
         const p  = this.player;
         const dx = this.input.mouse.x - p.x;
         const dy = this.input.mouse.y - p.y;
         const len = Math.hypot(dx, dy) || 1;
-        p.applyImpulse(
-            (dx / len) * GameConfig.PLAYER_SHOOT_POWER,
-            (dy / len) * GameConfig.PLAYER_SHOOT_POWER
+        
+        // Create bullet at player position
+        const bullet = new Bullet(
+            p.x,
+            p.y,
+            (dx / len) * GameConfig.BULLET_SPEED,
+            (dy / len) * GameConfig.BULLET_SPEED
         );
+        
+        this.game.addBullet(bullet);
         eventBus.emit(GameEvents.BALL_SHOOT, { ball: p });
     }
 
