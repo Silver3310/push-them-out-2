@@ -16,6 +16,7 @@ import { AIController } from '../entities/enemies/AIController.js';
 import { Hole }        from '../entities/objects/Hole.js';
 import { Planet }      from '../entities/objects/Planet.js';
 import { Bullet }      from '../entities/objects/Bullet.js';
+import { Menu }        from '../ui/Menu.js';
 
 const PLAYER_COLORS = ['#00ccff', '#ff44cc', '#44ff88', '#ffcc00'];
 const ENEMY_COLORS  = ['#ff4444', '#ff8844', '#cc44ff', '#ff44aa'];
@@ -38,6 +39,7 @@ class Game {
         this.planets = [];
         this.bullets = [];
 
+        this.menu = null;
         this._playerController = null;
         this._aiControllers    = [];
         this._lastTime    = 0;
@@ -52,16 +54,26 @@ class Game {
         ]);
 
         this.audio.bindEvents();
+        this.menu = new Menu(this.canvas, this.input);
         this._setupEventListeners();
-        this._buildLevel();
 
-        this.state = GameState.PLAYING;
-        eventBus.emit(GameEvents.PLAY_MUSIC, { key: 'music_main' });
-
+        this.state = GameState.MENU;
         requestAnimationFrame(ts => this._loop(ts));
     }
 
+    _startNewGame() {
+        this.menu.deactivate();
+        this._buildLevel();
+        // Seed the player controller with the current button state so the
+        // click that dismissed the menu doesn't trigger an immediate shot.
+        this._playerController.syncInputState();
+        this.state = GameState.PLAYING;
+        eventBus.emit(GameEvents.PLAY_MUSIC, { key: 'music_main' });
+    }
+
     _setupEventListeners() {
+        eventBus.on(GameEvents.MENU_START_GAME, () => this._startNewGame());
+
         eventBus.on(GameEvents.BALL_FELL_IN_HOLE, ({ ball }) => {
             if (ball.hasTag('player')) {
                 ball.die();
@@ -79,10 +91,12 @@ class Game {
             eventBus.emit(GameEvents.STOP_MUSIC);
         });
 
-        // ESC toggles pause
+        // ESC: in menu sub-screens go back; otherwise toggle pause
         window.addEventListener('keydown', e => {
             if (e.code !== 'Escape') return;
-            if (this.state === GameState.PLAYING) {
+            if (this.state === GameState.MENU) {
+                this.menu.handleEscape();
+            } else if (this.state === GameState.PLAYING) {
                 this.state = GameState.PAUSED;
                 eventBus.emit(GameEvents.GAME_PAUSE);
             } else if (this.state === GameState.PAUSED) {
@@ -146,7 +160,9 @@ class Game {
         const dt = Math.min((timestamp - this._lastTime) / 1000, 0.1);
         this._lastTime = timestamp;
 
-        if (this.state === GameState.PLAYING) {
+        if (this.state === GameState.MENU) {
+            this.menu.update(dt);
+        } else if (this.state === GameState.PLAYING) {
             this._accumulator += dt;
             const step  = GameConfig.FIXED_TIMESTEP;
             let   steps = 0;
@@ -245,6 +261,12 @@ class Game {
     _render() {
         const ctx = this.renderer.ctx;
         this.renderer.clear();
+
+        if (this.state === GameState.MENU) {
+            this.menu.render(ctx);
+            return;
+        }
+
         this.renderer.drawBackground();
         this.renderer.drawTableBorder({
             x: 20, y: 20,

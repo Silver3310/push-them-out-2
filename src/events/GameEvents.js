@@ -29,4 +29,7 @@ export const GameEvents = Object.freeze({
     PLAY_SFX:   'audio:playSfx',
     PLAY_MUSIC: 'audio:playMusic',
     STOP_MUSIC: 'audio:stopMusic',
+
+    // Menu (emitted by the Menu UI, consumed by Game)
+    MENU_START_GAME: 'menu:startGame',
 });
