@@ -4,6 +4,14 @@ import { LEVELS } from './LevelConfig.js';
 const TRANSITION_DURATION = 2.5;
 
 /**
+ * How long (ms) the sprite cross-fade runs once the new image has loaded.
+ * The sprite swap is initiated at the midpoint of the gradient fade, and
+ * this duration is sized so the sprite finishes settling exactly when the
+ * gradient does — i.e. half of TRANSITION_DURATION expressed in ms.
+ */
+const SPRITE_FADE_MS = (TRANSITION_DURATION * 1000) / 2;
+
+/**
  * Drives level progression and the smooth visual handover between levels.
  *
  * `LevelManager` owns:
@@ -51,8 +59,10 @@ export class LevelManager {
          */
         this._transition = null;
 
-        // Apply level 1's sprite overrides immediately (no-op if empty).
-        this._applySpriteOverrides(this.current);
+        // Apply L1's sprite overrides immediately. This is a hard load (not a
+        // cross-fade): the sprites have just been preloaded by the manifest
+        // and we want them in place before the first frame.
+        this._applySpriteOverrides(this.current, /* fadeMs */ 0);
     }
 
     // -------------------------------------------------------------------------
@@ -90,7 +100,9 @@ export class LevelManager {
     reset() {
         this._index      = 0;
         this._transition = null;
-        this._applySpriteOverrides(this.current);
+        // Hard-restore L1 sprites — replays should look exactly like a fresh
+        // first run, not inherit whatever the previous run left in cache.
+        this._applySpriteOverrides(this.current, /* fadeMs */ 0);
     }
 
     /**
@@ -128,11 +140,13 @@ export class LevelManager {
 
         this._transition.t += dt;
 
-        // Midpoint: flip the active level index and apply sprite overrides.
+        // Midpoint: flip the active level index and start the sprite
+        // cross-fade. The sprite fade runs for the second half of the
+        // gradient transition so both effects settle together.
         const halfDone = this._transition.t >= this._transition.duration * 0.5;
         if (halfDone && !this._transition.swapped) {
             this._index += 1;
-            this._applySpriteOverrides(this.current);
+            this._applySpriteOverrides(this.current, SPRITE_FADE_MS);
             this._transition.swapped = true;
         }
 
@@ -178,11 +192,19 @@ export class LevelManager {
     // Private helpers
     // -------------------------------------------------------------------------
 
-    _applySpriteOverrides(level) {
+    /**
+     * Push the level's sprite-key → src map through to the SpriteManager.
+     *
+     * @param {object} level   - The level config whose overrides to apply.
+     * @param {number} fadeMs  - 0 for an instant load (initial / replay reset);
+     *                           > 0 to cross-fade from the previously cached
+     *                           image to the new one over `fadeMs` ms.
+     */
+    _applySpriteOverrides(level, fadeMs) {
         if (!this._sprites) return;
         const overrides = level.spriteOverrides ?? {};
         for (const [key, src] of Object.entries(overrides)) {
-            this._sprites.swapSprite(key, src);
+            this._sprites.swapSprite(key, src, fadeMs);
         }
     }
 }

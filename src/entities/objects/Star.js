@@ -43,7 +43,7 @@ export class Star extends Ball {
         // Ambient glow is always drawn regardless of sprite vs canvas path
         _drawGlow(ctx, this.x, this.y, this.radius);
 
-        if (this._sprites?._cache.has(STAR_SPRITE_KEY)) {
+        if (this._sprites?.has(STAR_SPRITE_KEY)) {
             // Sprite path — rotate around the star's centre, same spin rate
             this._sprites.draw(
                 ctx,

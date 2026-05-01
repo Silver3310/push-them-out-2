@@ -128,12 +128,12 @@ class Game {
 
         // Per-level transition. The visual cross-fade is handled by
         // LevelManager (started here via advance()); the player only sees
-        // a single notification announcing the next goal.
+        // a single notification announcing the next level's goal.
         eventBus.on(GameEvents.LEVEL_COMPLETE, ({ to }) => {
             this.levels.advance();
             this.score.startNewLevel();
-            if (to?.completionMessage) {
-                eventBus.emit(GameEvents.SHOW_NOTIFICATION, { message: to.completionMessage });
+            if (to?.entryMessage) {
+                eventBus.emit(GameEvents.SHOW_NOTIFICATION, { message: to.entryMessage });
             }
         });
 
@@ -190,7 +190,7 @@ class Game {
             { x: W - 160, y: 160,     color: ENEMY_COLORS[1], name: 'AI' },
             { x: W - 160, y: H - 160, color: ENEMY_COLORS[2], name: 'AI' },
         ];
-        this.enemies = enemyDefs.map(d => new Enemy(d.x, d.y, d.color, d.name));
+        this.enemies = enemyDefs.map(d => new Enemy(d.x, d.y, d.color, d.name, this.sprites));
 
         // Give AI controllers a live reference to holes and players
         const worldRef = { holes: this.holes, players: this.players };

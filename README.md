@@ -67,18 +67,35 @@ Progression is intentionally seamless. The player **never** sees a
   planets all interpolate their colours each frame.
 - At the midpoint of the fade the level index flips, the HUD label
   switches, and any per-level sprite overrides are applied via
-  `SpriteManager.swapSprite`.
+  `SpriteManager.swapSprite(key, src, fadeMs)`. The sprite manager keeps
+  the outgoing image around for `fadeMs` and alpha-blends both during
+  `draw()`, so the artwork dissolves into the new look in lock-step with
+  the gradient.
 - The only player-facing acknowledgement is one `SHOW_NOTIFICATION`
-  carrying the new goal (e.g. *"Good job! Now collect the 60 stars!"*).
+  carrying the destination level's `entryMessage` (e.g. *"Good job! Now
+  collect the 60 stars!"*).
 
 Adding a seventh level is purely additive — push a new entry onto `LEVELS`
 and the rest of the engine picks it up automatically.
 
 ### Per-level art
 
-Per-level sprites live under `assets/sprites/levels/levelN/<key>.png` (the
-keys mirror those in [`assets/sprites/sprites.json`](assets/sprites/sprites.json)
-— `star_collectible`, `asteroid`, `planet_green`, etc.). Drop a PNG at the
-expected path and `LevelManager` loads it during the next transition. If a
-file is missing the previous sprite or the procedural fallback is used —
-the game never breaks for missing assets.
+Three entity sprite keys can be customised per level — they're listed in
+`LEVEL_SPRITE_KEYS` inside [`src/core/LevelConfig.js`](src/core/LevelConfig.js):
+
+| Key                | Drawn by                                            |
+| ------------------ | --------------------------------------------------- |
+| `star_collectible` | [`Star`](src/entities/objects/Star.js)              |
+| `asteroid`         | [`Asteroid`](src/entities/objects/Asteroid.js)      |
+| `enemy_ball`       | [`Enemy`](src/entities/enemies/Enemy.js)            |
+
+Each entity follows the same pattern: if `SpriteManager.has(key)` returns
+true the PNG is rendered; otherwise a procedural canvas fallback is drawn.
+This means the game runs with zero asset files and you can opt into custom
+art per level a sprite at a time.
+
+Drop your replacement PNGs at the conventional path —
+`assets/sprites/levels/levelN/<key>.png` — or, for full control, edit
+that level's `spriteOverrides` map in `LevelConfig.js`. Missing files
+leave the previously cached image in place (the game never breaks for
+missing assets).
