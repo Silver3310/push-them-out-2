@@ -7,6 +7,12 @@ export const GameEvents = Object.freeze({
     GAME_VICTORY: 'game:victory',
     STATE_CHANGE: 'game:stateChange',
 
+    // Level lifecycle (visual cross-fade is owned by LevelManager;
+    // listeners use this event to reset per-level state and surface a
+    // single notification — there is no formal "level cleared" modal).
+    // Payload: { from: LevelConfig, to: LevelConfig }
+    LEVEL_COMPLETE: 'level:complete',
+
     // Ball events
     BALL_HIT:          'ball:hit',
     BALL_FELL_IN_HOLE: 'ball:fellInHole',

@@ -1,6 +1,7 @@
 {
     "version": "1.0.0",
     "_comment": "Swap any sprite by changing 'src' to a new path. Sizes are in authored-resolution pixels (1280x720). SpriteManager auto-scales them to the actual canvas size.",
+    "_levels_comment": "Per-level sprite overrides are declared in src/core/LevelConfig.js and applied by LevelManager via SpriteManager.swapSprite at the midpoint of each cross-fade. The convention is: drop a PNG at assets/sprites/levels/levelN/<key>.png (e.g. assets/sprites/levels/level3/asteroid.png) and it will load when level N becomes active. Missing files keep the previous level's sprite (or the procedural fallback if none has ever loaded).",
     "sprites": {
         "player_ball":   { "src": "assets/sprites/players/player_ball.png",   "width": 36,  "height": 36  },
         "enemy_ball":    { "src": "assets/sprites/enemies/enemy_ball.png",    "width": 36,  "height": 36  },
