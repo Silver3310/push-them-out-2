@@ -15,6 +15,7 @@ import { Enemy }       from '../entities/enemies/Enemy.js';
 import { AIController } from '../entities/enemies/AIController.js';
 import { Hole }        from '../entities/objects/Hole.js';
 import { Planet }      from '../entities/objects/Planet.js';
+import { Bullet }      from '../entities/objects/Bullet.js';
 
 const PLAYER_COLORS = ['#00ccff', '#ff44cc', '#44ff88', '#ffcc00'];
 const ENEMY_COLORS  = ['#ff4444', '#ff8844', '#cc44ff', '#ff44aa'];
@@ -35,6 +36,7 @@ class Game {
         this.enemies = [];
         this.holes   = [];
         this.planets = [];
+        this.bullets = [];
 
         this._playerController = null;
         this._aiControllers    = [];
@@ -117,7 +119,7 @@ class Game {
         // Human player (centre)
         const player = new Player(W / 2, H / 2, PLAYER_COLORS[1], 'Sweet Bulldog');
         this.players = [player];
-        this._playerController = new PlayerController(player, this.input);
+        this._playerController = new PlayerController(player, this.input, this);
 
         // AI enemies (corners)
         const enemyDefs = [
@@ -130,6 +132,10 @@ class Game {
         // Give AI controllers a live reference to holes and players
         const worldRef = { holes: this.holes, players: this.players };
         this._aiControllers = this.enemies.map(e => new AIController(e, worldRef));
+    }
+
+    addBullet(bullet) {
+        this.bullets.push(bullet);
     }
 
     // -------------------------------------------------------------------------
@@ -163,9 +169,73 @@ class Game {
         allBalls.forEach(b => b.update(dt));
         this.physics.update(allBalls, this.planets, this.holes);
 
+        // Update bullets and handle collisions
+        this._updateBullets(dt);
+
         // Keep audio listener at player position for spatial sound
         const p = this.players[0];
         if (p && !p.isInHole) this.audio.setListenerPosition(p.x, p.y);
+    }
+
+    _updateBullets(dt) {
+        // Update all bullets
+        this.bullets.forEach(b => b.update(dt));
+
+        // Remove out-of-bounds or inactive bullets
+        this.bullets = this.bullets.filter(b => {
+            if (!b.active) return false;
+            if (b.isOutOfBounds(GameConfig.CANVAS_WIDTH, GameConfig.CANVAS_HEIGHT)) {
+                b.destroy();
+                return false;
+            }
+            return true;
+        });
+
+        // Check bullet-enemy collisions
+        const activeBullets = this.bullets.filter(b => b.active);
+        const activeEnemies = this.enemies.filter(e => e.active && !e.isInHole);
+        
+        for (let i = 0; i < activeBullets.length; i++) {
+            const bullet = activeBullets[i];
+            for (let j = 0; j < activeEnemies.length; j++) {
+                const enemy = activeEnemies[j];
+                if (this._checkBulletEnemyCollision(bullet, enemy)) {
+                    break; // Bullet was destroyed, check next bullet
+                }
+            }
+        }
+    }
+
+    _checkBulletEnemyCollision(bullet, enemy) {
+        const dx = enemy.x - bullet.x;
+        const dy = enemy.y - bullet.y;
+        const distSq = dx * dx + dy * dy;
+        const minDistSq = (bullet.radius + enemy.radius) ** 2;
+
+        if (distSq >= minDistSq) return false; // No collision
+
+        // Calculate normalized push direction
+        const dist = Math.sqrt(distSq) || 0.001; // Avoid division by zero
+        const nx = dx / dist;
+        const ny = dy / dist;
+
+        // Push enemy away from bullet
+        const pushStrength = GameConfig.BULLET_PUSH_FORCE;
+        enemy.applyImpulse(nx * pushStrength, ny * pushStrength);
+
+        // Destroy bullet on impact
+        bullet.destroy();
+
+        // Emit collision event
+        eventBus.emit(GameEvents.BALL_HIT, {
+            a: bullet,
+            b: enemy,
+            x: bullet.x,
+            y: bullet.y,
+            strength: pushStrength,
+        });
+
+        return true; // Collision occurred, bullet was destroyed
     }
 
     // -------------------------------------------------------------------------
@@ -185,6 +255,7 @@ class Game {
         this.holes.forEach(h => h.render(ctx));
         this.planets.forEach(p => p.render(ctx));
         [...this.enemies, ...this.players].forEach(b => b.render(ctx));
+        this.bullets.forEach(b => b.render(ctx));
 
         this.renderer.drawHUD(this.score.getSnapshot(), this.players);
         this.renderer.drawControls();
