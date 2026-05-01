@@ -37,4 +37,8 @@ export const GameEvents = Object.freeze({
 
     // Menu (emitted by the Menu UI, consumed by Game)
     MENU_START_GAME: 'menu:startGame',
+
+    // Notifications (emit to display a galaxy-style slide-in panel)
+    // Payload: { message: string, duration?: number }
+    SHOW_NOTIFICATION: 'ui:showNotification',
 });

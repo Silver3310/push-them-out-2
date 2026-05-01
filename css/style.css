@@ -34,3 +34,61 @@ body {
     height: 100%;
     pointer-events: none;
 }
+
+/* ---------- Galaxy-style notification panel ----------
+ *
+ * The panel starts fully off-screen to the right and slides in when the
+ * .visible class is applied.  Removing .visible reverses the transition.
+ *
+ * top: 60px keeps the window below the HUD score / stars-lost indicators
+ * which are drawn at ~y 20-38 in the canvas logical coordinate space.
+ */
+.notification {
+    position: absolute;
+    top: 60px;
+    right: 12px;
+    width: 260px;
+
+    background: linear-gradient(
+        150deg,
+        rgba(8, 0, 28, 0.93) 0%,
+        rgba(4, 0, 16, 0.96) 100%
+    );
+    border: 1px solid rgba(140, 40, 220, 0.7);
+    border-radius: 5px;
+    overflow: hidden;
+
+    box-shadow:
+        0 0 18px rgba(140, 40, 220, 0.30),
+        0 0  5px rgba(140, 40, 220, 0.55),
+        inset 0 0 14px rgba(60, 0, 100, 0.25);
+
+    /* Start fully off-screen; .visible slides it into view */
+    transform: translateX(calc(100% + 20px));
+    /* transition duration must match SLIDE_MS in NotificationManager.js */
+    transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+
+    pointer-events: none;
+    z-index: 10;
+}
+
+.notification.visible {
+    transform: translateX(0);
+}
+
+.notification__header {
+    padding: 5px 12px;
+    font-size: 9px;
+    letter-spacing: 2.5px;
+    color: rgba(190, 120, 255, 0.85);
+    border-bottom: 1px solid rgba(140, 40, 220, 0.30);
+    background: rgba(80, 0, 140, 0.25);
+}
+
+.notification__body {
+    padding: 9px 12px 11px;
+    font-size: 15px;
+    font-weight: bold;
+    line-height: 1.55;
+    color: #ddd0ff;
+}
