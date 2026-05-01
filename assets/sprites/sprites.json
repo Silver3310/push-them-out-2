@@ -16,6 +16,12 @@
             "height": 20
         },
         "star_particle": { "src": "assets/sprites/ui/star.png",               "width": 16,  "height": 16  },
-        "background":    { "src": "assets/sprites/ui/background.png",         "width": 1280,"height": 720 }
+        "background":    { "src": "assets/sprites/ui/background.png",         "width": 1280,"height": 720 },
+        "asteroid": {
+            "_comment": "Falling asteroid entity. Replace 'src' with any ~50x50 PNG to customise the look. Transparent background recommended; the image is rotated (tumbles) as it falls.",
+            "src": "assets/sprites/objects/asteroid.png",
+            "width": 50,
+            "height": 50
+        }
     }
 }

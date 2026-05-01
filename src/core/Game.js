@@ -16,8 +16,9 @@ import { AIController } from '../entities/enemies/AIController.js';
 import { Hole }        from '../entities/objects/Hole.js';
 import { Planet }      from '../entities/objects/Planet.js';
 import { Bullet }      from '../entities/objects/Bullet.js';
-import { Star } from '../entities/objects/Star.js';
-import { Menu }        from '../ui/Menu.js';
+import { Star }            from '../entities/objects/Star.js';
+import { AsteroidManager } from '../logic/AsteroidManager.js';
+import { Menu }            from '../ui/Menu.js';
 
 const PLAYER_COLORS = ['#00ccff', '#ff44cc', '#44ff88', '#ffcc00'];
 const ENEMY_COLORS  = ['#ff4444', '#ff8844', '#cc44ff', '#ff44aa'];
@@ -47,6 +48,10 @@ class Game {
         this.planets = [];
         this.bullets = [];
         this.stars   = [];
+
+        // Asteroid system – initialised after sprites are loaded so the manager
+        // can pass the SpriteManager reference through to each Asteroid instance.
+        this._asteroidManager = null;
 
         this.menu = null;
         this._playerController = null;
@@ -165,6 +170,13 @@ class Game {
         this.stars = [];
         for (let i = 0; i < GameConfig.STAR_COUNT; i++) {
             this._spawnStar();
+        }
+
+        // Asteroid system – reset (or create) so a fresh cycle begins each game
+        if (this._asteroidManager) {
+            this._asteroidManager.reset();
+        } else {
+            this._asteroidManager = new AsteroidManager(this.sprites);
         }
     }
 
@@ -298,6 +310,9 @@ class Game {
         // Update bullets and handle collisions
         this._updateBullets(dt);
 
+        // Advance asteroids and resolve their impacts against game entities
+        this._updateAsteroids(dt);
+
         // Keep audio listener at player position for spatial sound
         const p = this.players[0];
         if (p && !p.isInHole) this.audio.setListenerPosition(p.x, p.y);
@@ -328,6 +343,72 @@ class Game {
                 if (this._checkBulletEnemyCollision(bullet, enemy)) {
                     break; // Bullet was destroyed, check next bullet
                 }
+            }
+        }
+    }
+
+    /**
+     * Advance asteroid positions, cull out-of-bounds ones, and resolve impacts
+     * against players, enemies, and stars.
+     *
+     * Asteroids are NOT physics participants (they skip Physics.update()) so
+     * their collision behaviour is handled entirely here:
+     *   - Player hit  → player dies and respawns (same as falling into a hole)
+     *   - Enemy hit   → enemy dies and respawns, score credited
+     *   - Star hit    → star permanently removed, star-lost score recorded
+     * In all cases the asteroid itself is destroyed on first contact.
+     */
+    _updateAsteroids(dt) {
+        const W = GameConfig.CANVAS_WIDTH;
+        const H = GameConfig.CANVAS_HEIGHT;
+
+        this._asteroidManager.update(dt, W, H);
+
+        for (const asteroid of this._asteroidManager.asteroids) {
+            if (!asteroid.active) continue;
+
+            asteroid.update(dt);
+
+            // Check player impacts
+            for (const player of this.players) {
+                if (!player.active || player.isInHole) continue;
+                if (!_circlesOverlap(asteroid, player)) continue;
+
+                asteroid.destroy();
+                player.die();
+                this.score.recordPlayerDeath();
+                setTimeout(() => { if (!player.active) return; player.respawn(); }, 2000);
+                eventBus.emit(GameEvents.ASTEROID_HIT, { asteroid, target: player });
+                break;
+            }
+
+            if (!asteroid.active) continue;
+
+            // Check enemy impacts
+            for (const enemy of this.enemies) {
+                if (!enemy.active || enemy.isInHole) continue;
+                if (!_circlesOverlap(asteroid, enemy)) continue;
+
+                asteroid.destroy();
+                enemy.die();
+                this.score.recordEnemyKill();
+                setTimeout(() => { if (!enemy.active) return; enemy.respawn(); }, 3000);
+                eventBus.emit(GameEvents.ASTEROID_HIT, { asteroid, target: enemy });
+                break;
+            }
+
+            if (!asteroid.active) continue;
+
+            // Check star impacts
+            for (const star of this.stars) {
+                if (!star.active || star.isInHole) continue;
+                if (!_circlesOverlap(asteroid, star)) continue;
+
+                asteroid.destroy();
+                star.destroy();
+                this.score.recordStarLost();
+                eventBus.emit(GameEvents.ASTEROID_HIT, { asteroid, target: star });
+                break;
             }
         }
     }
@@ -393,8 +474,15 @@ class Game {
         [...this.enemies, ...this.players].forEach(b => b.render(ctx));
         this.bullets.forEach(b => b.render(ctx));
 
+        // Asteroids render above other entities so they read as incoming threats
+        this._asteroidManager?.asteroids.forEach(a => a.render(ctx));
+
         this.renderer.drawHUD(this.score.getSnapshot(), this.players);
         this.renderer.drawControls();
+
+        // Warning overlay sits above HUD elements to be impossible to miss
+        const countdown = this._asteroidManager?.warningCountdown ?? 0;
+        if (countdown > 0) this.renderer.drawAsteroidWarning(countdown);
 
         if (this.state === GameState.PAUSED)  this._renderPauseScreen(ctx);
         if (this.state === GameState.VICTORY) this._renderVictoryScreen(ctx);
@@ -447,6 +535,18 @@ class Game {
 
         ctx.restore();
     }
+}
+
+// ---------------------------------------------------------------------------
+// Module-level helpers
+// ---------------------------------------------------------------------------
+
+/** Returns true when two circular entities overlap. */
+function _circlesOverlap(a, b) {
+    const dx   = a.x - b.x;
+    const dy   = a.y - b.y;
+    const minD = a.radius + b.radius;
+    return dx * dx + dy * dy < minD * minD;
 }
 
 // Bootstrap
