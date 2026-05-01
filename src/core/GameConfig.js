@@ -27,10 +27,10 @@ export const GameConfig = Object.freeze({
     ENEMY_AI_SPEED:         0.25,
 
     // Bullet
-    BULLET_RADIUS:   4,
-    BULLET_SPEED:    10,
+    BULLET_RADIUS:   7,
+    BULLET_SPEED:    14,
     BULLET_LIFETIME: 3.0,
-    BULLET_PUSH_FORCE: 20,
+    BULLET_PUSH_FORCE: 45,
 
     // Obstacles
     PLANET_BOUNCE_RESTITUTION: 0.6,
