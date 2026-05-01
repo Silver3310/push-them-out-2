@@ -1,0 +1,58 @@
+import { GameConfig } from '../../core/GameConfig.js';
+import { eventBus }   from '../../events/EventBus.js';
+import { GameEvents } from '../../events/GameEvents.js';
+
+export class PlayerController {
+    constructor(player, inputHandler) {
+        this.player = player;
+        this.input  = inputHandler;
+        this._prevLeft  = false;
+        this._prevRight = false;
+    }
+
+    update(dt) {
+        const p = this.player;
+        if (!p.active || p.isInHole) return;
+
+        // WASD / arrow-key thrust
+        const t = GameConfig.PLAYER_THRUST;
+        if (this.input.isKeyDown('KeyW')     || this.input.isKeyDown('ArrowUp'))    p.applyImpulse(0,  -t);
+        if (this.input.isKeyDown('KeyS')     || this.input.isKeyDown('ArrowDown'))  p.applyImpulse(0,   t);
+        if (this.input.isKeyDown('KeyA')     || this.input.isKeyDown('ArrowLeft'))  p.applyImpulse(-t,  0);
+        if (this.input.isKeyDown('KeyD')     || this.input.isKeyDown('ArrowRight')) p.applyImpulse(t,   0);
+
+        // Left click: shoot toward cursor (rising-edge only)
+        if (this.input.mouse.left && !this._prevLeft) this._shoot();
+        this._prevLeft = this.input.mouse.left;
+
+        // Right click: special burst (rising-edge, respects cooldown)
+        if (this.input.mouse.right && !this._prevRight) this._special();
+        this._prevRight = this.input.mouse.right;
+    }
+
+    _shoot() {
+        const p  = this.player;
+        const dx = this.input.mouse.x - p.x;
+        const dy = this.input.mouse.y - p.y;
+        const len = Math.hypot(dx, dy) || 1;
+        p.applyImpulse(
+            (dx / len) * GameConfig.PLAYER_SHOOT_POWER,
+            (dy / len) * GameConfig.PLAYER_SHOOT_POWER
+        );
+        eventBus.emit(GameEvents.BALL_SHOOT, { ball: p });
+    }
+
+    _special() {
+        if (this.player.specialCooldown > 0) return;
+        this.player.specialCooldown = 3.0;
+        const p  = this.player;
+        const dx = this.input.mouse.x - p.x;
+        const dy = this.input.mouse.y - p.y;
+        const len = Math.hypot(dx, dy) || 1;
+        p.applyImpulse(
+            (dx / len) * GameConfig.PLAYER_SHOOT_POWER * 2.2,
+            (dy / len) * GameConfig.PLAYER_SHOOT_POWER * 2.2
+        );
+        eventBus.emit(GameEvents.BALL_SHOOT, { ball: p, special: true });
+    }
+}

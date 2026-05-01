@@ -1,0 +1,14 @@
+{
+    "version": "1.0.0",
+    "_comment": "Swap any sound by changing 'src'. Distance-based spatial volume is handled automatically by AudioEngine using the player's world position as the listener. preload:false defers loading until first use.",
+    "sounds": {
+        "ball_hit":     { "src": "assets/sounds/sfx/ball_hit.ogg",     "preload": true,  "category": "sfx"   },
+        "ball_in_hole": { "src": "assets/sounds/sfx/ball_in_hole.ogg", "preload": true,  "category": "sfx"   },
+        "shoot":        { "src": "assets/sounds/sfx/shoot.ogg",        "preload": true,  "category": "sfx"   },
+        "special":      { "src": "assets/sounds/sfx/special.ogg",      "preload": true,  "category": "sfx"   },
+        "respawn":      { "src": "assets/sounds/sfx/respawn.ogg",      "preload": true,  "category": "sfx"   },
+        "victory":      { "src": "assets/sounds/sfx/victory.ogg",      "preload": false, "category": "sfx"   },
+        "music_main":   { "src": "assets/sounds/music/main_theme.ogg", "preload": false, "category": "music" },
+        "music_menu":   { "src": "assets/sounds/music/menu.ogg",       "preload": false, "category": "music" }
+    }
+}

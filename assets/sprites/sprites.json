@@ -1,0 +1,15 @@
+{
+    "version": "1.0.0",
+    "_comment": "Swap any sprite by changing 'src' to a new path. Sizes are in authored-resolution pixels (1280x720). SpriteManager auto-scales them to the actual canvas size.",
+    "sprites": {
+        "player_ball":   { "src": "assets/sprites/players/player_ball.png",   "width": 36,  "height": 36  },
+        "enemy_ball":    { "src": "assets/sprites/enemies/enemy_ball.png",    "width": 36,  "height": 36  },
+        "planet_green":  { "src": "assets/sprites/objects/planet_green.png",  "width": 110, "height": 110 },
+        "planet_orange": { "src": "assets/sprites/objects/planet_orange.png", "width": 80,  "height": 80  },
+        "planet_blue":   { "src": "assets/sprites/objects/planet_blue.png",   "width": 80,  "height": 80  },
+        "planet_pink":   { "src": "assets/sprites/objects/planet_pink.png",   "width": 90,  "height": 90  },
+        "hole":          { "src": "assets/sprites/objects/hole.png",          "width": 40,  "height": 40  },
+        "star_particle": { "src": "assets/sprites/ui/star.png",               "width": 16,  "height": 16  },
+        "background":    { "src": "assets/sprites/ui/background.png",         "width": 1280,"height": 720 }
+    }
+}
