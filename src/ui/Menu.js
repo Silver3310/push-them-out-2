@@ -259,8 +259,8 @@ export class Menu {
         ctx.shadowColor  = '#7ce6ff';
         ctx.shadowBlur   = 28;
         ctx.fillStyle    = '#ffffff';
-        ctx.font = `bold 96px 'Courier New'`;
-        ctx.fillText('PushThemOut 2', W / 2, 160);
+        ctx.font = `bold 80px 'Courier New'`;
+        ctx.fillText('PushThemOut - Time Is Out', W / 2, 160);
 
         ctx.shadowBlur = 0;
         ctx.font       = `18px 'Courier New'`;
