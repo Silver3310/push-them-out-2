@@ -9,6 +9,12 @@
         "planet_blue":   { "src": "assets/sprites/objects/planet_blue.png",   "width": 80,  "height": 80  },
         "planet_pink":   { "src": "assets/sprites/objects/planet_pink.png",   "width": 90,  "height": 90  },
         "hole":          { "src": "assets/sprites/objects/hole.png",          "width": 40,  "height": 40  },
+        "star_collectible": {
+            "_comment": "Collectible star entity. Replace 'src' with any 20x20 (or larger square) PNG to customise the look. The image is rotated automatically; transparent background recommended.",
+            "src": "assets/sprites/objects/star_collectible.png",
+            "width": 20,
+            "height": 20
+        },
         "star_particle": { "src": "assets/sprites/ui/star.png",               "width": 16,  "height": 16  },
         "background":    { "src": "assets/sprites/ui/background.png",         "width": 1280,"height": 720 }
     }

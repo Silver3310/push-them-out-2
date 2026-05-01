@@ -16,7 +16,7 @@ import { AIController } from '../entities/enemies/AIController.js';
 import { Hole }        from '../entities/objects/Hole.js';
 import { Planet }      from '../entities/objects/Planet.js';
 import { Bullet }      from '../entities/objects/Bullet.js';
-import { Star }        from '../entities/objects/Star.js';
+import { Star } from '../entities/objects/Star.js';
 import { Menu }        from '../ui/Menu.js';
 
 const PLAYER_COLORS = ['#00ccff', '#ff44cc', '#44ff88', '#ffcc00'];
@@ -211,7 +211,9 @@ class Game {
             attempts++;
         } while (!safe && attempts < maxTry);
 
-        const star = new Star(x, y);
+        // Pass the SpriteManager so the star can render a custom PNG if
+        // "star_collectible" is present in assets/sprites/sprites.json.
+        const star = new Star(x, y, this.sprites);
         this.stars.push(star);
         return star;
     }
