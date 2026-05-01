@@ -71,7 +71,7 @@ export class Asteroid extends Ball {
     render(ctx) {
         if (!this.active) return;
 
-        if (this._sprites?._cache.has(ASTEROID_SPRITE_KEY)) {
+        if (this._sprites?.has(ASTEROID_SPRITE_KEY)) {
             const d = this.radius * 2;
             this._sprites.draw(ctx, ASTEROID_SPRITE_KEY, this.x, this.y, d, d, {
                 rotation: this._angle,

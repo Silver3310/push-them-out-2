@@ -1,5 +1,6 @@
 import { GameConfig }  from './GameConfig.js';
 import { GameState }   from './GameState.js';
+import { LevelManager } from './LevelManager.js';
 import { eventBus }    from '../events/EventBus.js';
 import { GameEvents }  from '../events/GameEvents.js';
 import { InputHandler } from '../events/InputHandler.js';
@@ -40,7 +41,10 @@ class Game {
         this.sprites  = new SpriteManager();
         this.audio    = new AudioManager();
         this.physics  = new Physics(GameConfig.CANVAS_WIDTH, GameConfig.CANVAS_HEIGHT);
-        this.score    = new ScoreManager();
+        // LevelManager is created after sprites load (init()) so it can drive
+        // sprite swaps; ScoreManager depends on it for the per-level goal.
+        this.levels   = null;
+        this.score    = null;
 
         this.state   = GameState.LOADING;
         this.players = [];
@@ -70,6 +74,8 @@ class Game {
         ]);
 
         this.audio.bindEvents();
+        this.levels         = new LevelManager(this.sprites);
+        this.score          = new ScoreManager(this.levels);
         this.menu           = new Menu(this.canvas, this.input);
         this._notifications = new NotificationManager(document.getElementById('ui-overlay'));
         this._setupEventListeners();
@@ -80,6 +86,7 @@ class Game {
 
     _startNewGame() {
         this.menu.deactivate();
+        this.levels.reset();
         this.score.reset();
         this._buildLevel();
         // Seed the player controller with the current button state so the
@@ -91,7 +98,7 @@ class Game {
         // Level-start tutorial notifications shown sequentially
         this._notifications.reset();
         eventBus.emit(GameEvents.SHOW_NOTIFICATION, { message: 'Welcome to the game! We hope you enjoy it 😎' });
-        eventBus.emit(GameEvents.SHOW_NOTIFICATION, { message: `You control the pink ball, your goal is to collect ${GameConfig.STARS_TO_WIN} stars` });
+        eventBus.emit(GameEvents.SHOW_NOTIFICATION, { message: `You control the pink ball, your goal is to collect ${this.levels.current.starsToWin} stars` });
         eventBus.emit(GameEvents.SHOW_NOTIFICATION, { message: 'Beware other balls, asteroids, everything! O_O' });
     }
 
@@ -117,6 +124,17 @@ class Game {
         eventBus.on(GameEvents.GAME_VICTORY, () => {
             this.state = GameState.VICTORY;
             eventBus.emit(GameEvents.STOP_MUSIC);
+        });
+
+        // Per-level transition. The visual cross-fade is handled by
+        // LevelManager (started here via advance()); the player only sees
+        // a single notification announcing the next level's goal.
+        eventBus.on(GameEvents.LEVEL_COMPLETE, ({ to }) => {
+            this.levels.advance();
+            this.score.startNewLevel();
+            if (to?.entryMessage) {
+                eventBus.emit(GameEvents.SHOW_NOTIFICATION, { message: to.entryMessage });
+            }
         });
 
         // ESC: in menu sub-screens go back; otherwise toggle pause
@@ -148,14 +166,17 @@ class Game {
             new Hole(W - 55, H - 55),
         ];
 
-        // Planet obstacles as bumpers
+        // Planet obstacles as bumpers. Colours come from the active level's
+        // palette and are recoloured each frame during level transitions
+        // (see _applyLevelPalette).
+        const palette = this.levels.current.planetPalette;
         this.planets = [
-            new Planet(320,       240,      55, '#c8e06e'),
-            new Planet(960,       480,      55, '#c8e06e'),
-            new Planet(W / 2,     190,      40, '#e0a06e'),
-            new Planet(W / 2,     H - 190,  40, '#6ec8e0'),
-            new Planet(190,       H / 2,    45, '#e06ec8'),
-            new Planet(W - 190,   H / 2,    45, '#c8e06e'),
+            new Planet(320,       240,      55, palette[0]),
+            new Planet(960,       480,      55, palette[1]),
+            new Planet(W / 2,     190,      40, palette[2]),
+            new Planet(W / 2,     H - 190,  40, palette[3]),
+            new Planet(190,       H / 2,    45, palette[4]),
+            new Planet(W - 190,   H / 2,    45, palette[5]),
         ];
 
         // Human player (centre)
@@ -169,7 +190,7 @@ class Game {
             { x: W - 160, y: 160,     color: ENEMY_COLORS[1], name: 'AI' },
             { x: W - 160, y: H - 160, color: ENEMY_COLORS[2], name: 'AI' },
         ];
-        this.enemies = enemyDefs.map(d => new Enemy(d.x, d.y, d.color, d.name));
+        this.enemies = enemyDefs.map(d => new Enemy(d.x, d.y, d.color, d.name, this.sprites));
 
         // Give AI controllers a live reference to holes and players
         const worldRef = { holes: this.holes, players: this.players };
@@ -301,6 +322,12 @@ class Game {
     }
 
     _update(dt) {
+        // Advance the level cross-fade timer and apply the interpolated
+        // planet palette to the live obstacle entities. This runs every
+        // physics step but is a cheap colour assignment when not transitioning.
+        this.levels.update(dt);
+        this._applyLevelPalette();
+
         this._playerController.update(dt);
         this._aiControllers.forEach(ai => ai.update(dt));
 
@@ -454,6 +481,17 @@ class Game {
         return true; // Collision occurred, bullet was destroyed
     }
 
+    /**
+     * Push the active (possibly interpolated) planet palette onto the live
+     * Planet entities so their colour follows the level cross-fade.
+     */
+    _applyLevelPalette() {
+        const palette = this.levels.getRenderSpec().planetPalette;
+        for (let i = 0; i < this.planets.length; i++) {
+            this.planets[i].color = palette[i] ?? this.planets[i].color;
+        }
+    }
+
     // -------------------------------------------------------------------------
     // Rendering
     // -------------------------------------------------------------------------
@@ -467,12 +505,13 @@ class Game {
             return;
         }
 
-        this.renderer.drawBackground();
+        const spec = this.levels.getRenderSpec();
+        this.renderer.drawBackground(spec);
         this.renderer.drawTableBorder({
             x: 20, y: 20,
             w: GameConfig.CANVAS_WIDTH  - 40,
             h: GameConfig.CANVAS_HEIGHT - 40,
-        });
+        }, spec);
 
         this.holes.forEach(h => h.render(ctx));
         this.planets.forEach(p => p.render(ctx));
@@ -486,7 +525,12 @@ class Game {
         // Asteroids render above other entities so they read as incoming threats
         this._asteroidManager?.asteroids.forEach(a => a.render(ctx));
 
-        this.renderer.drawHUD(this.score.getSnapshot(), this.players);
+        const lvl = this.levels.current;
+        this.renderer.drawHUD(
+            this.score.getSnapshot(),
+            { name: lvl.name, starsToWin: lvl.starsToWin },
+            this.players,
+        );
         this.renderer.drawControls();
 
         // Warning overlay sits above HUD elements to be impossible to miss
@@ -527,7 +571,7 @@ class Game {
         ctx.textBaseline = 'middle';
         ctx.shadowColor  = '#ffd700';
         ctx.shadowBlur   = 30;
-        ctx.fillText('LEVEL 1 CLEAR!', W / 2, H / 2 - 50);
+        ctx.fillText('ALL LEVELS CLEAR!', W / 2, H / 2 - 50);
 
         ctx.shadowBlur   = 0;
         ctx.fillStyle    = '#ffffff';

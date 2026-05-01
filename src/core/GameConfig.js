@@ -40,9 +40,9 @@ export const GameConfig = Object.freeze({
     STAR_MASS:   0.3,   // light – easy for enemies to knock around
     STAR_COUNT:  20,    // stars kept alive on the board at all times
 
-    // Level 1 win condition
-    LEVEL_NAME:   'LEVEL 1',
-    STARS_TO_WIN: 50,
+    // Per-level data lives in src/core/LevelConfig.js (level name, star
+    // goal, gradient palette, sprite overrides). LevelManager interpolates
+    // between consecutive entries during the smooth cross-fade transition.
 
     // Audio distance model (Web Audio API inverse-distance rolloff)
     AUDIO_REFERENCE_DISTANCE: 200,

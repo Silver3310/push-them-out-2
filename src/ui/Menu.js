@@ -1,4 +1,5 @@
 import { GameConfig } from '../core/GameConfig.js';
+import { LEVELS }     from '../core/LevelConfig.js';
 import { eventBus }   from '../events/EventBus.js';
 import { GameEvents } from '../events/GameEvents.js';
 
@@ -314,7 +315,7 @@ export class Menu {
             '• Right-click to use your special burst ability.',
             '• Knock enemies into the corner holes to score stars.',
             '• If you fall in a hole yourself, you respawn after a short delay.',
-            `• Reach ${GameConfig.STARS_TO_WIN} stars to win the match.`,
+            `• Clear all ${LEVELS.length} levels — each demands more stars than the last (starting at ${LEVELS[0].starsToWin}, ending at ${LEVELS[LEVELS.length - 1].starsToWin}).`,
             '• Press ESC during the game to pause.',
         ];
 

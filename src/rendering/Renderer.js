@@ -32,15 +32,22 @@ export class Renderer {
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     }
 
-    drawBackground() {
+    /**
+     * Paint the level background. The two gradient stops come from the
+     * `LevelManager`'s render spec, which interpolates them mid-transition
+     * so consecutive levels cross-fade smoothly.
+     *
+     * @param {{bgInner: string, bgOuter: string}} spec
+     */
+    drawBackground(spec) {
         const ctx = this.ctx;
         const cx  = GameConfig.CANVAS_WIDTH  / 2;
         const cy  = GameConfig.CANVAS_HEIGHT / 2;
         const r   = Math.max(GameConfig.CANVAS_WIDTH, GameConfig.CANVAS_HEIGHT) * 0.8;
 
         const gradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
-        gradient.addColorStop(0, '#1a0030');
-        gradient.addColorStop(1, '#050008');
+        gradient.addColorStop(0, spec.bgInner);
+        gradient.addColorStop(1, spec.bgOuter);
         ctx.fillStyle = gradient;
         ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
@@ -53,18 +60,33 @@ export class Renderer {
         }
     }
 
-    drawTableBorder(rect) {
+    /**
+     * Stroke the play-field border using the active level's accent colours.
+     *
+     * @param {{x: number, y: number, w: number, h: number}} rect
+     * @param {{borderColor: string, borderShadow: string}} spec
+     */
+    drawTableBorder(rect, spec) {
         const ctx = this.ctx;
         ctx.save();
-        ctx.strokeStyle = '#4a0060';
+        ctx.strokeStyle = spec.borderColor;
         ctx.lineWidth   = 6;
-        ctx.shadowColor = '#9900cc';
+        ctx.shadowColor = spec.borderShadow;
         ctx.shadowBlur  = 18;
         ctx.strokeRect(rect.x, rect.y, rect.w, rect.h);
         ctx.restore();
     }
 
-    drawHUD(scoreSnapshot, players) {
+    /**
+     * Render the in-game HUD.
+     *
+     * @param {object} scoreSnapshot - From `ScoreManager.getSnapshot()`. Uses
+     *     `starsCollectedThisLevel` (per-level progress) and `starsLost`.
+     * @param {object} levelInfo     - `{ name: string, starsToWin: number }`
+     *     pulled from the active `LevelManager.current`.
+     * @param {Player[]} players
+     */
+    drawHUD(scoreSnapshot, levelInfo, players) {
         const ctx = this.ctx;
         const W   = GameConfig.CANVAS_WIDTH;
         ctx.save();
@@ -74,11 +96,11 @@ export class Renderer {
         ctx.font      = `bold 13px 'Courier New'`;
         ctx.fillStyle = 'rgba(255, 255, 255, 0.45)';
         ctx.textAlign = 'center';
-        ctx.fillText(GameConfig.LEVEL_NAME, W / 2, 20);
+        ctx.fillText(levelInfo.name, W / 2, 20);
 
         // Star progress (top-right): gold ★ collected / goal
-        const collected = scoreSnapshot.starsCollected;
-        const goal      = GameConfig.STARS_TO_WIN;
+        const collected = scoreSnapshot.starsCollectedThisLevel;
+        const goal      = levelInfo.starsToWin;
         ctx.font      = `bold 16px 'Courier New'`;
         ctx.fillStyle = '#ffd700';
         ctx.textAlign = 'right';
