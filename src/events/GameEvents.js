@@ -31,6 +31,10 @@ export const GameEvents = Object.freeze({
     PLAY_MUSIC: 'audio:playMusic',
     STOP_MUSIC: 'audio:stopMusic',
 
+    // Asteroids
+    ASTEROID_WARNING: 'asteroid:warning', // emitted ASTEROID_WARNING_TIME seconds before a shower
+    ASTEROID_HIT:     'asteroid:hit',     // emitted when an asteroid destroys an entity on impact
+
     // Menu (emitted by the Menu UI, consumed by Game)
     MENU_START_GAME: 'menu:startGame',
 });

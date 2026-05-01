@@ -134,6 +134,46 @@ export class Renderer {
         });
         ctx.restore();
     }
+
+    /**
+     * Render an urgent asteroid-shower warning overlay.
+     * Called every render frame while `countdown > 0`.
+     *
+     * The warning pulses between full and half opacity so it catches the eye
+     * without obscuring gameplay. The countdown rounds up so it reads "10"
+     * at the very start and "1" in the last second.
+     *
+     * @param {number} countdown - Seconds remaining (fractional, > 0).
+     */
+    drawAsteroidWarning(countdown) {
+        const ctx  = this.ctx;
+        const W    = GameConfig.CANVAS_WIDTH;
+
+        // Pulse between 0.55 and 1.0 opacity at ~1 Hz
+        const pulse = 0.55 + 0.45 * (0.5 + 0.5 * Math.sin(Date.now() * 0.006));
+
+        ctx.save();
+        ctx.globalAlpha  = pulse;
+        ctx.textAlign    = 'center';
+        ctx.textBaseline = 'middle';
+
+        // Primary warning line
+        ctx.font         = `bold 22px 'Courier New'`;
+        ctx.fillStyle    = '#ff4400';
+        ctx.shadowColor  = '#ff2200';
+        ctx.shadowBlur   = 14;
+        ctx.fillText('!! ASTEROID SHOWER INCOMING !!', W / 2, 58);
+
+        // Countdown digit – larger and brighter to convey urgency
+        const secs = Math.ceil(countdown);
+        ctx.font        = `bold 16px 'Courier New'`;
+        ctx.fillStyle   = '#ffaa00';
+        ctx.shadowColor = '#ff8800';
+        ctx.shadowBlur  = 8;
+        ctx.fillText(`${secs}s`, W / 2, 80);
+
+        ctx.restore();
+    }
 }
 
 // Pre-baked star positions so the starfield is stable across frames

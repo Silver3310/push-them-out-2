@@ -51,6 +51,15 @@ export const GameConfig = Object.freeze({
     MUSIC_VOLUME: 0.4,
     SFX_VOLUME:   0.8,
 
+    // Asteroids
+    ASTEROID_RADIUS:           24,    // authored-resolution pixels
+    ASTEROID_MASS:              5.0,  // heavy – not deflected by normal ball collisions
+    ASTEROID_SPEED:             2.5,  // pixels per frame; slow enough for the player to react
+    ASTEROID_SHOWER_INTERVAL:  60,   // seconds between shower events
+    ASTEROID_SHOWER_SIZE_MIN:   5,   // minimum asteroids in a shower burst
+    ASTEROID_SHOWER_SIZE_MAX:   7,   // maximum asteroids in a shower burst
+    ASTEROID_WARNING_TIME:     10,   // seconds before a shower that the warning fires
+
     // Sprite auto-scale: all sprite sizes are authored for this reference resolution
     SPRITE_REFERENCE_WIDTH:  1280,
     SPRITE_REFERENCE_HEIGHT: 720,
