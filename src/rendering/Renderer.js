@@ -68,12 +68,31 @@ export class Renderer {
         const ctx = this.ctx;
         const W   = GameConfig.CANVAS_WIDTH;
         ctx.save();
+        ctx.textBaseline = 'middle';
 
-        // Stars counter (top-right)
+        // Level name (top-centre)
+        ctx.font      = `bold 13px 'Courier New'`;
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.45)';
+        ctx.textAlign = 'center';
+        ctx.fillText(GameConfig.LEVEL_NAME, W / 2, 20);
+
+        // Star progress (top-right): gold ★ collected / goal
+        const collected = scoreSnapshot.starsCollected;
+        const goal      = GameConfig.STARS_TO_WIN;
         ctx.font      = `bold 16px 'Courier New'`;
-        ctx.fillStyle = '#00ccff';
+        ctx.fillStyle = '#ffd700';
         ctx.textAlign = 'right';
-        ctx.fillText(`${scoreSnapshot.stars}/${GameConfig.STARS_TO_WIN} stars`, W - 20, 30);
+        ctx.shadowColor = 'rgba(255, 215, 0, 0.6)';
+        ctx.shadowBlur  = 6;
+        ctx.fillText(`★ ${collected} / ${goal}`, W - 20, 20);
+        ctx.shadowBlur = 0;
+
+        // Stars-lost indicator (small, muted, below star counter)
+        if (scoreSnapshot.starsLost > 0) {
+            ctx.font      = `11px 'Courier New'`;
+            ctx.fillStyle = 'rgba(200, 100, 100, 0.75)';
+            ctx.fillText(`${scoreSnapshot.starsLost} lost`, W - 20, 38);
+        }
 
         // Player panels (top-left, one per player)
         let px = 20;
@@ -88,8 +107,7 @@ export class Renderer {
             ctx.fillStyle    = '#ffffff';
             ctx.textAlign    = 'left';
             ctx.font         = `bold 12px 'Courier New'`;
-            ctx.textBaseline = 'middle';
-            ctx.fillText(`${p.name.toUpperCase()}`, px + 26, 14);
+            ctx.fillText(p.name.toUpperCase(), px + 26, 14);
             ctx.fillStyle = '#aaaaaa';
             ctx.font      = `11px 'Courier New'`;
             ctx.fillText(`${p.deaths} Deaths`, px + 26, 28);

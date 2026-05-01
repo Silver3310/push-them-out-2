@@ -16,10 +16,18 @@ import { AIController } from '../entities/enemies/AIController.js';
 import { Hole }        from '../entities/objects/Hole.js';
 import { Planet }      from '../entities/objects/Planet.js';
 import { Bullet }      from '../entities/objects/Bullet.js';
+import { Star }        from '../entities/objects/Star.js';
 import { Menu }        from '../ui/Menu.js';
 
 const PLAYER_COLORS = ['#00ccff', '#ff44cc', '#44ff88', '#ffcc00'];
 const ENEMY_COLORS  = ['#ff4444', '#ff8844', '#cc44ff', '#ff44aa'];
+
+// Minimum squared distance from a hole centre when spawning a star
+const STAR_SPAWN_HOLE_BUFFER_SQ   = 90 ** 2;
+// Minimum squared distance from a planet centre when spawning a star
+const STAR_SPAWN_PLANET_BUFFER_SQ = 72 ** 2;
+// Wall inset so stars don't appear on the border
+const STAR_SPAWN_WALL_INSET = 80;
 
 class Game {
     constructor() {
@@ -38,6 +46,7 @@ class Game {
         this.holes   = [];
         this.planets = [];
         this.bullets = [];
+        this.stars   = [];
 
         this.menu = null;
         this._playerController = null;
@@ -63,6 +72,7 @@ class Game {
 
     _startNewGame() {
         this.menu.deactivate();
+        this.score.reset();
         this._buildLevel();
         // Seed the player controller with the current button state so the
         // click that dismissed the menu doesn't trigger an immediate shot.
@@ -83,6 +93,10 @@ class Game {
                 ball.die();
                 this.score.recordEnemyKill();
                 setTimeout(() => { if (!ball.active) return; ball.respawn(); }, 3000);
+            } else if (ball.hasTag('star')) {
+                // Star is permanently removed; _maintainStarCount will spawn a replacement
+                ball.destroy();
+                this.score.recordStarLost();
             }
         });
 
@@ -146,10 +160,96 @@ class Game {
         // Give AI controllers a live reference to holes and players
         const worldRef = { holes: this.holes, players: this.players };
         this._aiControllers = this.enemies.map(e => new AIController(e, worldRef));
+
+        // Seed the board with the initial star population
+        this.stars = [];
+        for (let i = 0; i < GameConfig.STAR_COUNT; i++) {
+            this._spawnStar();
+        }
     }
 
     addBullet(bullet) {
         this.bullets.push(bullet);
+    }
+
+    // -------------------------------------------------------------------------
+    // Star lifecycle helpers
+    // -------------------------------------------------------------------------
+
+    /**
+     * Spawn a single new star at a safe random position (away from holes,
+     * planets, and walls) and add it to the stars array.
+     */
+    _spawnStar() {
+        const W      = GameConfig.CANVAS_WIDTH;
+        const H      = GameConfig.CANVAS_HEIGHT;
+        const inset  = STAR_SPAWN_WALL_INSET;
+        const maxTry = 60;
+        let x, y, safe;
+        let attempts = 0;
+
+        do {
+            safe = true;
+            x    = inset + Math.random() * (W - inset * 2);
+            y    = inset + Math.random() * (H - inset * 2);
+
+            for (const hole of this.holes) {
+                const dx = x - hole.x;
+                const dy = y - hole.y;
+                if (dx * dx + dy * dy < STAR_SPAWN_HOLE_BUFFER_SQ) { safe = false; break; }
+            }
+
+            if (safe) {
+                for (const planet of this.planets) {
+                    const dx  = x - planet.x;
+                    const dy  = y - planet.y;
+                    const lim = STAR_SPAWN_PLANET_BUFFER_SQ + planet.radius * planet.radius;
+                    if (dx * dx + dy * dy < lim) { safe = false; break; }
+                }
+            }
+
+            attempts++;
+        } while (!safe && attempts < maxTry);
+
+        const star = new Star(x, y);
+        this.stars.push(star);
+        return star;
+    }
+
+    /**
+     * Remove inactive / in-hole stars from the array and replenish up to
+     * STAR_COUNT so there are always stars on the board to chase.
+     * Called every physics step — it is O(n) and very cheap.
+     */
+    _maintainStarCount() {
+        this.stars = this.stars.filter(s => s.active && !s.isInHole);
+
+        const needed = GameConfig.STAR_COUNT - this.stars.length;
+        for (let i = 0; i < needed; i++) {
+            this._spawnStar();
+        }
+    }
+
+    /**
+     * Check whether the player overlaps any star and collect those stars.
+     * Called after balls have moved but before physics resolves separations,
+     * so positions naturally reflect real contact.
+     */
+    _collectStars() {
+        const player = this.players[0];
+        if (!player || !player.active || player.isInHole) return;
+
+        const collectDist = player.radius + GameConfig.STAR_RADIUS;
+
+        for (const star of this.stars) {
+            if (!star.active || star.isInHole) continue;
+            const dx = player.x - star.x;
+            const dy = player.y - star.y;
+            if (dx * dx + dy * dy < collectDist * collectDist) {
+                star.destroy();
+                this.score.recordStarCollected();
+            }
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -181,8 +281,16 @@ class Game {
         this._playerController.update(dt);
         this._aiControllers.forEach(ai => ai.update(dt));
 
-        const allBalls = [...this.players, ...this.enemies];
+        // Replenish any stars that were collected or fell into holes
+        this._maintainStarCount();
+
+        // Stars are full physics participants: pushed by enemies, pulled by holes
+        const allBalls = [...this.players, ...this.enemies, ...this.stars];
         allBalls.forEach(b => b.update(dt));
+
+        // Collect stars before physics separates the player from them
+        this._collectStars();
+
         this.physics.update(allBalls, this.planets, this.holes);
 
         // Update bullets and handle collisions
@@ -210,7 +318,7 @@ class Game {
         // Check bullet-enemy collisions
         const activeBullets = this.bullets.filter(b => b.active);
         const activeEnemies = this.enemies.filter(e => e.active && !e.isInHole);
-        
+
         for (let i = 0; i < activeBullets.length; i++) {
             const bullet = activeBullets[i];
             for (let j = 0; j < activeEnemies.length; j++) {
@@ -276,6 +384,10 @@ class Game {
 
         this.holes.forEach(h => h.render(ctx));
         this.planets.forEach(p => p.render(ctx));
+
+        // Stars render under entities so they appear as ground-level pickups
+        this.stars.forEach(s => s.render(ctx));
+
         [...this.enemies, ...this.players].forEach(b => b.render(ctx));
         this.bullets.forEach(b => b.render(ctx));
 
@@ -309,21 +421,28 @@ class Game {
         ctx.save();
         ctx.fillStyle = 'rgba(0,15,35,0.82)';
         ctx.fillRect(0, 0, W, H);
-        ctx.fillStyle    = '#00ccff';
+
+        ctx.fillStyle    = '#ffd700';
         ctx.font         = `bold 72px 'Courier New'`;
         ctx.textAlign    = 'center';
         ctx.textBaseline = 'middle';
-        ctx.shadowColor  = '#00ccff';
+        ctx.shadowColor  = '#ffd700';
         ctx.shadowBlur   = 30;
-        ctx.fillText('VICTORY!', W / 2, H / 2 - 40);
+        ctx.fillText('LEVEL 1 CLEAR!', W / 2, H / 2 - 50);
+
         ctx.shadowBlur   = 0;
         ctx.fillStyle    = '#ffffff';
         ctx.font         = `24px 'Courier New'`;
         const snap = this.score.getSnapshot();
         ctx.fillText(
-            `${snap.stars} stars  ·  ${snap.enemiesKilled} enemies  ·  ${snap.playerDeaths} deaths`,
-            W / 2, H / 2 + 30
+            `★ ${snap.starsCollected} collected  ·  ${snap.enemiesKilled} enemies  ·  ${snap.playerDeaths} deaths`,
+            W / 2, H / 2 + 20
         );
+
+        ctx.fillStyle = '#aaaaaa';
+        ctx.font      = `16px 'Courier New'`;
+        ctx.fillText(`${snap.starsLost} star${snap.starsLost !== 1 ? 's' : ''} lost to holes`, W / 2, H / 2 + 56);
+
         ctx.restore();
     }
 }

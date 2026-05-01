@@ -15,7 +15,8 @@ export const GameEvents = Object.freeze({
 
     // Score
     SCORE_CHANGE:    'score:change',
-    STAR_COLLECTED:  'score:starCollected',
+    STAR_COLLECTED:  'score:starCollected', // player touched a collectible star
+    STAR_LOST:       'score:starLost',      // star fell into a hole
 
     // Player
     PLAYER_DEATH: 'player:death',

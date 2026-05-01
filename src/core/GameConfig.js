@@ -35,8 +35,14 @@ export const GameConfig = Object.freeze({
     // Obstacles
     PLANET_BOUNCE_RESTITUTION: 0.6,
 
-    // Win condition
-    STARS_TO_WIN: 70,
+    // Stars (collectible entities)
+    STAR_RADIUS: 10,
+    STAR_MASS:   0.3,   // light – easy for enemies to knock around
+    STAR_COUNT:  20,    // stars kept alive on the board at all times
+
+    // Level 1 win condition
+    LEVEL_NAME:   'LEVEL 1',
+    STARS_TO_WIN: 50,
 
     // Audio distance model (Web Audio API inverse-distance rolloff)
     AUDIO_REFERENCE_DISTANCE: 200,
