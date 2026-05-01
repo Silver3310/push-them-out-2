@@ -87,7 +87,8 @@ body {
 
 .notification__body {
     padding: 9px 12px 11px;
-    font-size: 12px;
+    font-size: 15px;
+    font-weight: bold;
     line-height: 1.55;
     color: #ddd0ff;
 }
