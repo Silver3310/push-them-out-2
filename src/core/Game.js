@@ -17,8 +17,9 @@ import { Hole }        from '../entities/objects/Hole.js';
 import { Planet }      from '../entities/objects/Planet.js';
 import { Bullet }      from '../entities/objects/Bullet.js';
 import { Star }            from '../entities/objects/Star.js';
-import { AsteroidManager } from '../logic/AsteroidManager.js';
-import { Menu }            from '../ui/Menu.js';
+import { AsteroidManager }      from '../logic/AsteroidManager.js';
+import { Menu }                 from '../ui/Menu.js';
+import { NotificationManager }  from '../ui/NotificationManager.js';
 
 const PLAYER_COLORS = ['#00ccff', '#ff44cc', '#44ff88', '#ffcc00'];
 const ENEMY_COLORS  = ['#ff4444', '#ff8844', '#cc44ff', '#ff44aa'];
@@ -53,7 +54,8 @@ class Game {
         // can pass the SpriteManager reference through to each Asteroid instance.
         this._asteroidManager = null;
 
-        this.menu = null;
+        this.menu           = null;
+        this._notifications = null;
         this._playerController = null;
         this._aiControllers    = [];
         this._lastTime    = 0;
@@ -68,7 +70,8 @@ class Game {
         ]);
 
         this.audio.bindEvents();
-        this.menu = new Menu(this.canvas, this.input);
+        this.menu           = new Menu(this.canvas, this.input);
+        this._notifications = new NotificationManager(document.getElementById('ui-overlay'));
         this._setupEventListeners();
 
         this.state = GameState.MENU;
@@ -84,6 +87,12 @@ class Game {
         this._playerController.syncInputState();
         this.state = GameState.PLAYING;
         eventBus.emit(GameEvents.PLAY_MUSIC, { key: 'music_main' });
+
+        // Level-start tutorial notifications shown sequentially
+        this._notifications.reset();
+        eventBus.emit(GameEvents.SHOW_NOTIFICATION, { message: 'Welcome to the game! We hope you enjoy it 😎' });
+        eventBus.emit(GameEvents.SHOW_NOTIFICATION, { message: `You control the pink ball, your goal is to collect ${GameConfig.STARS_TO_WIN} stars` });
+        eventBus.emit(GameEvents.SHOW_NOTIFICATION, { message: 'Beware other balls, asteroids, everything! O_O' });
     }
 
     _setupEventListeners() {
