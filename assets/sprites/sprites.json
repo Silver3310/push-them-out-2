@@ -23,6 +23,12 @@
             "src": "assets/sprites/objects/asteroid.png",
             "width": 50,
             "height": 50
+        },
+        "boss": {
+            "_comment": "Final-level boss sprite. Drawn at 5x player radius (180x180 by default). Drop a PNG at assets/sprites/levels/level6/boss.png to override; missing files leave the procedural fallback in place.",
+            "src": "assets/sprites/enemies/boss.png",
+            "width": 180,
+            "height": 180
         }
     }
 }

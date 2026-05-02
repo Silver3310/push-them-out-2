@@ -12,7 +12,15 @@ export class Player extends Ball {
         this.spawnX  = x;
         this.spawnY  = y;
         this.specialCooldown = 0;
+        // Brief grace window after respawn — prevents instant re-kill from
+        // spiked enemies sitting on the spawn point or lingering boss rays.
+        this._invulnTimer = 0;
         this.addTag('player');
+    }
+
+    /** True while the post-respawn grace window has not expired. */
+    get isInvulnerable() {
+        return this._invulnTimer > 0;
     }
 
     die() {
@@ -26,17 +34,24 @@ export class Player extends Ball {
         this.vx       = 0;
         this.vy       = 0;
         this.isInHole = false;
+        this._invulnTimer = GameConfig.PLAYER_RESPAWN_INVULN;
         eventBus.emit(GameEvents.PLAYER_SPAWN, { player: this });
     }
 
     update(dt) {
         super.update(dt);
         if (this.specialCooldown > 0) this.specialCooldown -= dt;
+        if (this._invulnTimer > 0)    this._invulnTimer    -= dt;
     }
 
     render(ctx) {
         if (this.isInHole) return;
         ctx.save();
+
+        // Flicker while invulnerable so the player can read the grace window
+        if (this.isInvulnerable) {
+            ctx.globalAlpha = 0.45 + 0.45 * Math.abs(Math.sin(performance.now() * 0.018));
+        }
 
         // Soft glow halo
         const glow = ctx.createRadialGradient(

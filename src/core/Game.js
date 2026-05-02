@@ -13,17 +13,27 @@ import { ScoreManager } from '../logic/ScoreManager.js';
 import { Player }      from '../entities/players/Player.js';
 import { PlayerController } from '../entities/players/PlayerController.js';
 import { Enemy }       from '../entities/enemies/Enemy.js';
+import { Boss }        from '../entities/enemies/Boss.js';
 import { AIController } from '../entities/enemies/AIController.js';
+import { BossController } from '../entities/enemies/BossController.js';
 import { Hole }        from '../entities/objects/Hole.js';
 import { Planet }      from '../entities/objects/Planet.js';
-import { Bullet }      from '../entities/objects/Bullet.js';
 import { Star }            from '../entities/objects/Star.js';
 import { AsteroidManager }      from '../logic/AsteroidManager.js';
 import { Menu }                 from '../ui/Menu.js';
 import { NotificationManager }  from '../ui/NotificationManager.js';
 
 const PLAYER_COLORS = ['#00ccff', '#ff44cc', '#44ff88', '#ffcc00'];
-const ENEMY_COLORS  = ['#ff4444', '#ff8844', '#cc44ff', '#ff44aa'];
+
+// Standard-enemy spawn slots used by `_createEnemies` for non-boss levels.
+// Indexed by enemy index modulo array length, so 1-2 enemies always land in
+// opposite corners and additional enemies cycle through the remaining slots.
+const ENEMY_SPAWN_SLOTS = Object.freeze([
+    { x: 160,  y: 160  },
+    { x: -160, y: -160 }, // negative coords are interpreted as offsets from W/H
+    { x: 160,  y: -160 },
+    { x: -160, y: 160  },
+]);
 
 // Minimum squared distance from a hole centre when spawning a star
 const STAR_SPAWN_HOLE_BUFFER_SQ   = 90 ** 2;
@@ -53,6 +63,10 @@ class Game {
         this.planets = [];
         this.bullets = [];
         this.stars   = [];
+
+        // Convenience reference to the active boss (if any). Re-set every
+        // time the enemy roster is rebuilt; null on non-boss levels.
+        this._boss = null;
 
         // Asteroid system – initialised after sprites are loaded so the manager
         // can pass the SpriteManager reference through to each Asteroid instance.
@@ -111,6 +125,11 @@ class Game {
                 this.score.recordPlayerDeath();
                 setTimeout(() => { if (!ball.active) return; ball.respawn(); }, 2000);
             } else if (ball.hasTag('enemy')) {
+                // Bosses don't fall into holes — they're too massive to be
+                // captured by the existing pull radius — but if a future
+                // level config ever made one tag-as-enemy + boss, we still
+                // wouldn't want to count it as a kill / respawn it.
+                if (ball.hasTag('boss')) return;
                 ball.die();
                 this.score.recordEnemyKill();
                 setTimeout(() => { if (!ball.active) return; ball.respawn(); }, 3000);
@@ -127,14 +146,25 @@ class Game {
         });
 
         // Per-level transition. The visual cross-fade is handled by
-        // LevelManager (started here via advance()); the player only sees
-        // a single notification announcing the next level's goal.
+        // LevelManager (started here via advance()); the player sees up to
+        // two notifications: the goal announcement and an optional ability
+        // warning queued right after.
         eventBus.on(GameEvents.LEVEL_COMPLETE, ({ to }) => {
             this.levels.advance();
             this.score.startNewLevel();
             if (to?.entryMessage) {
                 eventBus.emit(GameEvents.SHOW_NOTIFICATION, { message: to.entryMessage });
             }
+            if (to?.enemies?.abilityMessage) {
+                eventBus.emit(GameEvents.SHOW_NOTIFICATION, { message: to.enemies.abilityMessage });
+            }
+        });
+
+        // Enemy roster swap is timed to the visual midpoint of the
+        // cross-fade so the new threats appear in lock-step with the new
+        // gradient and sprite set.
+        eventBus.on(GameEvents.LEVEL_TRANSITION_MID, ({ level }) => {
+            this._rebuildEnemies(level);
         });
 
         // ESC: in menu sub-screens go back; otherwise toggle pause
@@ -184,17 +214,8 @@ class Game {
         this.players = [player];
         this._playerController = new PlayerController(player, this.input, this);
 
-        // AI enemies (corners)
-        const enemyDefs = [
-            { x: 160,     y: 160,     color: ENEMY_COLORS[0], name: 'AI' },
-            { x: W - 160, y: 160,     color: ENEMY_COLORS[1], name: 'AI' },
-            { x: W - 160, y: H - 160, color: ENEMY_COLORS[2], name: 'AI' },
-        ];
-        this.enemies = enemyDefs.map(d => new Enemy(d.x, d.y, d.color, d.name, this.sprites));
-
-        // Give AI controllers a live reference to holes and players
-        const worldRef = { holes: this.holes, players: this.players };
-        this._aiControllers = this.enemies.map(e => new AIController(e, worldRef));
+        // Build the enemy roster declared by the active level.
+        this._rebuildEnemies(this.levels.current);
 
         // Seed the board with the initial star population
         this.stars = [];
@@ -208,6 +229,58 @@ class Game {
         } else {
             this._asteroidManager = new AsteroidManager(this.sprites);
         }
+    }
+
+    /**
+     * Replace `this.enemies` and `this._aiControllers` with fresh instances
+     * appropriate for `level`. Called on initial build and at the midpoint
+     * of every level transition so the visual cross-fade lands in sync with
+     * the new gameplay difficulty.
+     *
+     * Bullets are cleared at the same time so a shot fired by an enemy from
+     * the previous level doesn't hit a player on the new one.
+     */
+    _rebuildEnemies(level) {
+        for (const e of this.enemies) e.destroy();
+        this.bullets = [];
+
+        this.enemies = this._createEnemies(level);
+        this._boss   = this.enemies.find(e => e.hasTag('boss')) ?? null;
+
+        const worldRef = { holes: this.holes, players: this.players };
+        this._aiControllers = this.enemies.map(e =>
+            e.hasTag('boss')
+                ? new BossController(e, worldRef, this)
+                : new AIController(e, worldRef, this)
+        );
+    }
+
+    /**
+     * Build the entity instances for `level.enemies`. Boss levels return a
+     * single `Boss`; everyone else gets `count` `Enemy` instances sharing
+     * the level's tint colour and ability set.
+     */
+    _createEnemies(level) {
+        const W = GameConfig.CANVAS_WIDTH;
+        const H = GameConfig.CANVAS_HEIGHT;
+        const cfg = level.enemies;
+
+        if (cfg.boss) {
+            return [
+                new Boss(W * 0.78, H / 2, cfg.color, 'BOSS', this.sprites),
+            ];
+        }
+
+        const result = [];
+        for (let i = 0; i < cfg.count; i++) {
+            const slot = ENEMY_SPAWN_SLOTS[i % ENEMY_SPAWN_SLOTS.length];
+            const x = slot.x < 0 ? W + slot.x : slot.x;
+            const y = slot.y < 0 ? H + slot.y : slot.y;
+            result.push(new Enemy(x, y, cfg.color, 'AI', this.sprites, {
+                abilities: cfg.abilities,
+            }));
+        }
+        return result;
     }
 
     addBullet(bullet) {
@@ -341,10 +414,17 @@ class Game {
         // Collect stars before physics separates the player from them
         this._collectStars();
 
+        // Spike contact must be checked BEFORE physics separates the player
+        // from the spiked enemy — otherwise we'd never see the overlap.
+        this._handleSpikedEnemyContacts();
+
         this.physics.update(allBalls, this.planets, this.holes);
 
         // Update bullets and handle collisions
         this._updateBullets(dt);
+
+        // Boss-specific damage: anything in the firing ray dies.
+        this._handleBossRayKills();
 
         // Advance asteroids and resolve their impacts against game entities
         this._updateAsteroids(dt);
@@ -352,6 +432,58 @@ class Game {
         // Keep audio listener at player position for spatial sound
         const p = this.players[0];
         if (p && !p.isInHole) this.audio.setListenerPosition(p.x, p.y);
+    }
+
+    /**
+     * Kill the player on direct contact with any spiked enemy. Runs once
+     * per physics step before `Physics.update` separates overlapping balls,
+     * so a fresh frame-zero overlap is always caught.
+     */
+    _handleSpikedEnemyContacts() {
+        const player = this.players[0];
+        if (!player || !player.active || player.isInHole || player.isInvulnerable) return;
+
+        for (const enemy of this.enemies) {
+            if (!enemy.active || enemy.isInHole) continue;
+            if (!enemy.hasTag('spiked')) continue;
+
+            const dx = player.x - enemy.x;
+            const dy = player.y - enemy.y;
+            const minDist = player.radius + enemy.radius;
+            if (dx * dx + dy * dy >= minDist * minDist) continue;
+
+            this._killPlayer(player);
+            return;
+        }
+    }
+
+    /**
+     * Drive damage from the boss's lethal ray. No-op when there is no boss
+     * or the ray isn't currently in its firing phase.
+     */
+    _handleBossRayKills() {
+        if (!this._boss) return;
+        if (!this._boss.isRayLethal) return;
+        const player = this.players[0];
+        if (!player || !player.active || player.isInHole || player.isInvulnerable) return;
+        if (!this._boss.rayHits(player)) return;
+        this._killPlayer(player);
+    }
+
+    /**
+     * Common kill path for non-hole player deaths (spikes, rays, asteroids).
+     * Mirrors the in-hole flow by parking the entity with `isInHole = true`,
+     * which gates rendering, physics, and ability checks so the player
+     * cannot be re-killed during the 2-second respawn timer.
+     */
+    _killPlayer(player) {
+        if (player.isInHole) return; // Already mid-death — don't double-count
+        player.isInHole = true;
+        player.vx = 0;
+        player.vy = 0;
+        player.die();
+        this.score.recordPlayerDeath();
+        setTimeout(() => { if (!player.active) return; player.respawn(); }, 2000);
     }
 
     _updateBullets(dt) {
@@ -368,16 +500,20 @@ class Game {
             return true;
         });
 
-        // Check bullet-enemy collisions
         const activeBullets = this.bullets.filter(b => b.active);
         const activeEnemies = this.enemies.filter(e => e.active && !e.isInHole);
+        const player = this.players[0];
+        const playerActive = player?.active && !player.isInHole;
 
-        for (let i = 0; i < activeBullets.length; i++) {
-            const bullet = activeBullets[i];
-            for (let j = 0; j < activeEnemies.length; j++) {
-                const enemy = activeEnemies[j];
-                if (this._checkBulletEnemyCollision(bullet, enemy)) {
-                    break; // Bullet was destroyed, check next bullet
+        for (const bullet of activeBullets) {
+            if (bullet.kind === 'enemy') {
+                // Enemy bullets push the player but do NOT kill them
+                if (!playerActive) continue;
+                this._checkBulletPlayerCollision(bullet, player);
+            } else {
+                // Player bullets push enemies (existing behaviour)
+                for (const enemy of activeEnemies) {
+                    if (this._checkBulletEnemyCollision(bullet, enemy)) break;
                 }
             }
         }
@@ -408,12 +544,11 @@ class Game {
             // Check player impacts
             for (const player of this.players) {
                 if (!player.active || player.isInHole) continue;
+                if (player.isInvulnerable) continue;
                 if (!_circlesOverlap(asteroid, player)) continue;
 
                 asteroid.destroy();
-                player.die();
-                this.score.recordPlayerDeath();
-                setTimeout(() => { if (!player.active) return; player.respawn(); }, 2000);
+                this._killPlayer(player);
                 eventBus.emit(GameEvents.ASTEROID_HIT, { asteroid, target: player });
                 break;
             }
@@ -423,6 +558,9 @@ class Game {
             // Check enemy impacts
             for (const enemy of this.enemies) {
                 if (!enemy.active || enemy.isInHole) continue;
+                // Bosses shrug off asteroids — they're an environmental
+                // hazard, not a viable strategy for soloing the boss.
+                if (enemy.hasTag('boss')) continue;
                 if (!_circlesOverlap(asteroid, enemy)) continue;
 
                 asteroid.destroy();
@@ -482,6 +620,39 @@ class Game {
     }
 
     /**
+     * Push the player away from an enemy bullet without applying death — the
+     * bullet itself is destroyed on contact. Returns true on hit so callers
+     * can short-circuit further checks for that bullet.
+     */
+    _checkBulletPlayerCollision(bullet, player) {
+        const dx = player.x - bullet.x;
+        const dy = player.y - bullet.y;
+        const distSq = dx * dx + dy * dy;
+        const minDistSq = (bullet.radius + player.radius) ** 2;
+
+        if (distSq >= minDistSq) return false;
+
+        const dist = Math.sqrt(distSq) || 0.001;
+        const nx = dx / dist;
+        const ny = dy / dist;
+
+        const push = GameConfig.ENEMY_BULLET_PUSH_FORCE;
+        player.applyImpulse(nx * push, ny * push);
+
+        bullet.destroy();
+
+        eventBus.emit(GameEvents.BALL_HIT, {
+            a: bullet,
+            b: player,
+            x: bullet.x,
+            y: bullet.y,
+            strength: push,
+        });
+
+        return true;
+    }
+
+    /**
      * Push the active (possibly interpolated) planet palette onto the live
      * Planet entities so their colour follows the level cross-fade.
      */
@@ -521,6 +692,9 @@ class Game {
 
         [...this.enemies, ...this.players].forEach(b => b.render(ctx));
         this.bullets.forEach(b => b.render(ctx));
+
+        // Boss ray sits above entities so the killing flash is impossible to miss
+        this._boss?.renderRayOverlay(ctx);
 
         // Asteroids render above other entities so they read as incoming threats
         this._asteroidManager?.asteroids.forEach(a => a.render(ctx));

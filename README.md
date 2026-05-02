@@ -50,9 +50,16 @@ data declared in [`src/core/LevelConfig.js`](src/core/LevelConfig.js):
     id:                1,
     name:              'LEVEL 1',
     starsToWin:        50,
-    completionMessage: 'Good job! Now collect the 60 stars!',
+    entryMessage:      'Good job! Now collect the 60 stars!',
     background:        { bgInner, bgOuter, borderColor, borderShadow },
     planetPalette:     [/* six hex colours, one per planet */],
+    enemies:           {
+        count:          2,
+        abilities:      ['spiked', 'shooter'],     // any subset of EnemyAbility
+        color:          '#ffe066',                 // shared sprite tint
+        abilityMessage: 'Heads up — they shoot!',  // optional 2nd notification
+        boss:           false,                     // set true for a single Boss
+    },
     spriteOverrides:   { /* sprite-key → PNG path */ },
 }
 ```
@@ -89,6 +96,9 @@ Three entity sprite keys can be customised per level — they're listed in
 | `asteroid`         | [`Asteroid`](src/entities/objects/Asteroid.js)      |
 | `enemy_ball`       | [`Enemy`](src/entities/enemies/Enemy.js)            |
 
+A fourth key — `boss` — is only swapped on level 6 and is drawn by
+[`Boss`](src/entities/enemies/Boss.js).
+
 Each entity follows the same pattern: if `SpriteManager.has(key)` returns
 true the PNG is rendered; otherwise a procedural canvas fallback is drawn.
 This means the game runs with zero asset files and you can opt into custom
@@ -99,3 +109,45 @@ Drop your replacement PNGs at the conventional path —
 that level's `spriteOverrides` map in `LevelConfig.js`. Missing files
 leave the previously cached image in place (the game never breaks for
 missing assets).
+
+## Enemies
+
+Each level declares its enemy roster on `LEVELS[i].enemies`. The
+[`AIController`](src/entities/enemies/AIController.js) drives standard
+enemies (seek the player, flee nearby holes, fire bullets when the
+SHOOTER ability is on cooldown). The final level uses
+[`Boss`](src/entities/enemies/Boss.js) +
+[`BossController`](src/entities/enemies/BossController.js), which add
+two boss-only mechanics on top of the same base behaviour:
+
+- **Dash** — when the player crosses `BOSS_DASH_TRIGGER_DIST`, the boss
+  bursts toward them via direct velocity assignment (faster than the
+  player-cap; capped on the boss-side by `BOSS_MAX_SPEED`). Cooldown
+  controlled by `BOSS_DASH_COOLDOWN`.
+- **Killing ray** — every `BOSS_RAY_INTERVAL` seconds the boss aims at
+  the player's current position and runs an idle → telegraph → firing
+  state machine. The telegraph is a thin warning line (visible for
+  `BOSS_RAY_TELEGRAPH` seconds); the firing flash is a thick lethal
+  beam (active for `BOSS_RAY_DURATION` seconds). Anything inside
+  `BOSS_RAY_THICKNESS / 2` of the segment dies.
+
+### Damage rules
+
+| Source                              | Effect on player |
+| ----------------------------------- | ---------------- |
+| Normal enemy (no abilities) contact | Push (physics)   |
+| Spiked enemy contact                | Death + respawn  |
+| Enemy bullet hit                    | Push only        |
+| Boss firing ray                     | Death + respawn  |
+| Asteroid hit                        | Death + respawn  |
+
+Death funnels through `Game._killPlayer`, which parks the player with
+`isInHole = true` for the standard 2-second respawn delay and grants a
+short post-respawn invulnerability window
+(`PLAYER_RESPAWN_INVULN`) so the player can't be re-killed by a boss
+camping the spawn point.
+
+Enemy bullets are distinguished from player bullets by `bullet.kind`
+(see [`Bullet`](src/entities/objects/Bullet.js)). `Game._updateBullets`
+branches on that field so each kind only collides with its intended
+target.

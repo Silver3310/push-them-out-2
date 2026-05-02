@@ -26,6 +26,32 @@ export const GameConfig = Object.freeze({
     ENEMY_AI_THINK_INTERVAL: 0.5,
     ENEMY_AI_SPEED:         0.25,
 
+    // Per-level abilities are declared on each LEVELS[i].enemies entry in
+    // src/core/LevelConfig.js and consumed by Enemy + AIController. The
+    // tunables below shape the abilities themselves (cooldowns, projectile
+    // speed, etc.); see Enemy.js / Boss.js for how they are applied.
+    ENEMY_SHOOT_INTERVAL:     3.0,  // seconds between shots for shooter ability
+    ENEMY_BULLET_SPEED:       10,
+    ENEMY_BULLET_PUSH_FORCE:  30,   // impulse applied to player when hit by enemy bullet
+
+    // Boss (final-level antagonist; see Boss.js)
+    BOSS_RADIUS_MULT:         5,    // multiplier of PLAYER_RADIUS — boss radius
+    BOSS_MASS:                8.0,
+    BOSS_MAX_SPEED:           14,   // boss can exceed PLAYER_MAX_SPEED while dashing
+    BOSS_SHOOT_INTERVAL:      2.5,
+    BOSS_DASH_TRIGGER_DIST:   240,  // dash when player is closer than this
+    BOSS_DASH_COOLDOWN:       3.0,
+    BOSS_DASH_SPEED:          11,   // direct velocity-set magnitude (px/frame)
+    BOSS_RAY_INTERVAL:        6.0,  // seconds between ray attacks
+    BOSS_RAY_TELEGRAPH:       1.2,  // seconds the warning line is visible
+    BOSS_RAY_DURATION:        0.35, // seconds the lethal ray is rendered/active
+    BOSS_RAY_THICKNESS:       28,   // pixel width of the killing ray hitbox
+
+    // Player invulnerability after respawn — short grace window so a boss
+    // sitting on the spawn point or a lingering bullet doesn't produce a
+    // chain death loop.
+    PLAYER_RESPAWN_INVULN:    1.5,
+
     // Bullet
     BULLET_RADIUS:   7,
     BULLET_SPEED:    14,

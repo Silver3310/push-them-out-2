@@ -11,6 +11,9 @@ export class Ball extends Entity {
         this.color    = '#ffffff';
         this.name     = '';
         this.isInHole = false;
+        // Per-instance speed cap. Subclasses (e.g. Boss) override to allow
+        // bursts faster than the global PLAYER_MAX_SPEED clamp.
+        this.maxSpeed = GameConfig.PLAYER_MAX_SPEED;
         this.addTag('ball');
     }
 
@@ -21,10 +24,10 @@ export class Ball extends Entity {
     applyImpulse(ix, iy) {
         this.vx += ix / this.mass;
         this.vy += iy / this.mass;
-        // Clamp to max speed
+        // Clamp to per-instance max speed
         const s = this.speed;
-        if (s > GameConfig.PLAYER_MAX_SPEED) {
-            const scale = GameConfig.PLAYER_MAX_SPEED / s;
+        if (s > this.maxSpeed) {
+            const scale = this.maxSpeed / s;
             this.vx *= scale;
             this.vy *= scale;
         }

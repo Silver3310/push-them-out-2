@@ -1,4 +1,6 @@
 import { LEVELS } from './LevelConfig.js';
+import { eventBus }   from '../events/EventBus.js';
+import { GameEvents } from '../events/GameEvents.js';
 
 /** Duration (seconds) of the gradient cross-fade when advancing levels. */
 const TRANSITION_DURATION = 2.5;
@@ -142,12 +144,15 @@ export class LevelManager {
 
         // Midpoint: flip the active level index and start the sprite
         // cross-fade. The sprite fade runs for the second half of the
-        // gradient transition so both effects settle together.
+        // gradient transition so both effects settle together. Game
+        // listens to LEVEL_TRANSITION_MID and rebuilds the enemy roster
+        // here so it lines up with the sprite/colour swap.
         const halfDone = this._transition.t >= this._transition.duration * 0.5;
         if (halfDone && !this._transition.swapped) {
             this._index += 1;
             this._applySpriteOverrides(this.current, SPRITE_FADE_MS);
             this._transition.swapped = true;
+            eventBus.emit(GameEvents.LEVEL_TRANSITION_MID, { level: this.current });
         }
 
         if (this._transition.t >= this._transition.duration) {
