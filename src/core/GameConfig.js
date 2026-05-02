@@ -24,7 +24,7 @@ export const GameConfig = Object.freeze({
     ENEMY_RADIUS:           18,
     ENEMY_MASS:             1.0,
     ENEMY_AI_THINK_INTERVAL: 0.5,
-    ENEMY_AI_SPEED:         0.25,
+    ENEMY_AI_SPEED:         0.1,
 
     // Bullet
     BULLET_RADIUS:   7,
