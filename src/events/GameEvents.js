@@ -61,8 +61,22 @@ export const GameEvents = Object.freeze({
     BOMB_PRIMED:   'bomb:primed',   // a bomb just had its fuse lit
     BOMB_EXPLODED: 'bomb:exploded', // a bomb just detonated
 
-    // Menu (emitted by the Menu UI, consumed by Game)
-    MENU_START_GAME: 'menu:startGame',
+    // Menu (emitted by the Menu UI, consumed by Game / AudioManager)
+    MENU_START_GAME:    'menu:startGame',
+    // Fired when the cursor first enters a menu button (rising edge only —
+    // not re-emitted while the cursor stays on it). Drives the hover SFX.
+    // Payload: { id: string }
+    MENU_BUTTON_HOVER:  'menu:buttonHover',
+    // Fired when a menu button is clicked. Drives the click SFX.
+    // Payload: { id: string }
+    MENU_BUTTON_CLICK:  'menu:buttonClick',
+
+    // Boss (final-level antagonist)
+    // Fired the moment the killing-ray state machine flips IDLE → TELEGRAPH,
+    // i.e. the visual/audio "charge-up" begins. AudioManager plays the
+    // ray SFX here so the sound aligns with the on-screen warning line.
+    // Payload: { boss: Boss }
+    BOSS_RAY_TELEGRAPH: 'boss:rayTelegraph',
 
     // Notifications (emit to display a galaxy-style slide-in panel)
     // Payload: { message: string, duration?: number }
