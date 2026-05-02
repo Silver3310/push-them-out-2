@@ -100,6 +100,10 @@ export class Boss extends Enemy {
                 this._rayAngle = Math.atan2(target.y - this.y, target.x - this.x);
                 this._rayState = RayState.TELEGRAPH;
                 this._rayStateTimer = GameConfig.BOSS_RAY_TELEGRAPH;
+                // Emit the moment the warning line lights up — AudioManager
+                // turns this into the "charging" SFX so the audio cue lands
+                // in lock-step with the visual telegraph.
+                eventBus.emit(GameEvents.BOSS_RAY_TELEGRAPH, { boss: this });
             }
         } else if (this._rayState === RayState.TELEGRAPH) {
             this._rayStateTimer -= dt;

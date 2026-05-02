@@ -20,7 +20,7 @@ python3 -m http.server 8765
 - `src/events/` — shared `eventBus`, event names, raw input handler
 - `src/logic/` — physics, collision detection, score manager, math utils
 - `src/rendering/` — canvas renderer, camera, sprite manager
-- `src/audio/` — Web Audio engine and event-driven audio manager
+- `src/audio/` — Web Audio engine, manifest-driven audio manager, music + SFX
 - `src/ui/` — UI screens (e.g. the main `Menu`)
 
 ## Game flow
@@ -255,3 +255,112 @@ Cadence: solo replenishment with `BOMB_RESPAWN_DELAY` cooldown; a
    `_collectHazardWarnings()`.
 6. Flip the flag on whichever levels should run it inside
    [`LevelConfig.js`](src/core/LevelConfig.js).
+
+## Audio
+
+Audio is fully manifest-driven via
+[`assets/sounds/sounds.json`](assets/sounds/sounds.json) — no JS edits
+required to repoint a sound or to add per-level music. The runtime is
+split into:
+
+- [`AudioEngine`](src/audio/AudioEngine.js) — Web Audio graph
+  (BufferSource → spatial gain → SFX or music bus → master). Exposes
+  `playBuffer()` returning a `PlaybackHandle` with `fadeIn` /
+  `fadeOut` / `stop` for envelope control, plus `rampMusicVolume()`
+  for the pause dip.
+- [`AudioManager`](src/audio/AudioManager.js) — loads the manifest,
+  binds `eventBus` listeners, and owns the music crossfade + pause
+  behaviour. Lazy-loads any `preload: false` clip on first use so the
+  initial menu paint isn't blocked by long music files.
+
+### Manifest layout
+
+```jsonc
+{
+  "menuMusic":          "music_menu",
+  "musicByLevel":       { "1": "music_level_1", "2": "music_level_2", … },
+  "musicCrossfadeSec":  2.5,    // crossfade duration when swapping tracks
+  "musicPauseFadeSec":  0.25,   // dip duration on pause / resume
+  "sounds": {
+    "key": {
+      "src":      "assets/sounds/sfx/file.ogg",
+      "preload":  true,         // false = lazy-load on first use (default for music)
+      "category": "sfx",        // 'sfx' (sfx bus) or 'music' (music bus)
+      "volume":   1.0           // optional per-clip multiplier (0..1+)
+    }
+  }
+}
+```
+
+Top-level keys starting with `_` are ignored — they're for human-readable
+notes (`_comment`, `_schema`, `_groups`).
+
+### Per-level music & smooth transitions
+
+`musicByLevel` maps level ids to sound keys. When the player advances:
+
+1. `LevelManager.advance()` starts the 2.5s gradient cross-fade.
+2. At the cross-fade midpoint, `LEVEL_TRANSITION_MID` fires.
+3. `AudioManager` reacts by crossfading the music: the outgoing track
+   is ramped to silence and the incoming track is ramped up from
+   silence, both over `musicCrossfadeSec`.
+
+Adding a soundtrack for a new level is purely additive: add a `sounds`
+entry, then a `musicByLevel["N"]` row.
+
+### Pause / resume
+
+Pressing ESC during play emits `GAME_PAUSE`; `AudioManager` ramps the
+music bus to silence (`musicPauseFadeSec`) and plays the `pause_click`
+SFX. `GAME_RESUME` ramps the bus back to `GameConfig.MUSIC_VOLUME`.
+SFX is left audible so the pause click and resume click are heard.
+
+### Browser autoplay unlock
+
+The Web Audio context can't start until a user gesture. `AudioManager`
+binds a one-shot listener on the first `click` / `keydown` that
+initialises the context and starts preloading. Music requested before
+the unlock (e.g. `playMenuMusic()` at boot) is queued and played the
+moment the context comes up.
+
+### SFX bindings
+
+`AudioManager._bindSfxEvents` is the one place that maps game events to
+sound keys. To add a new SFX hook:
+
+1. Add an entry to `sounds.json`.
+2. Add one `eventBus.on(GameEvents.X, … this.playSfx('key', x, y))` line.
+
+The current bindings are:
+
+| Event                                            | Sound key          |
+| ------------------------------------------------ | ------------------ |
+| `MENU_BUTTON_HOVER`                              | `menu_hover`       |
+| `MENU_BUTTON_CLICK`                              | `menu_click`       |
+| `GAME_PAUSE` / `GAME_RESUME`                     | `pause_click`      |
+| `BALL_SHOOT` (player, non-special)               | `player_shoot`     |
+| `BALL_SHOOT` (enemy)                             | `enemy_shoot`      |
+| `BALL_SHOOT` (special burst)                     | `special`          |
+| `PLAYER_DEATH`                                   | `player_death`     |
+| `BLACK_HOLE_SWALLOWED` (target = player)         | `black_hole_death` |
+| `STAR_COLLECTED`                                 | `star_collected`   |
+| `PLAYER_ATE_CAKE`                                | `cake_eaten`       |
+| `ASTEROID/BLACK_HOLE/CAKE/BOMB_WARNING`          | `warning`          |
+| `SHOW_NOTIFICATION`                              | `notification`     |
+| `BOSS_RAY_TELEGRAPH`                             | `boss_ray`         |
+| `BALL_HIT` (`strength > 0.5`)                    | `ball_hit`         |
+| `BALL_FELL_IN_HOLE`                              | `ball_in_hole`     |
+| `PLAYER_SPAWN`                                   | `respawn`          |
+| `GAME_VICTORY`                                   | `victory`          |
+
+### Customising at runtime
+
+```js
+audioManager.swapSound('player_shoot', 'assets/sounds/sfx/laser.ogg');
+audioManager.playLevelMusic(3);          // forces level-3 music with crossfade
+audioManager.stopMusic(1.0);             // 1s fade to silence
+```
+
+Spatial attenuation is automatic — every `playSfx(key, x, y)` call
+attenuates by distance from the player using the inverse-distance model
+configured in `GameConfig.AUDIO_*`.

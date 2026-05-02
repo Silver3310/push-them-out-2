@@ -101,6 +101,10 @@ class Game {
         this._notifications = new NotificationManager(document.getElementById('ui-overlay'));
         this._setupEventListeners();
 
+        // Queue the menu soundtrack — AudioManager defers playback until the
+        // browser's first-gesture audio unlock, so this is safe pre-click.
+        this.audio.playMenuMusic();
+
         this.state = GameState.MENU;
         requestAnimationFrame(ts => this._loop(ts));
     }
@@ -114,7 +118,8 @@ class Game {
         // click that dismissed the menu doesn't trigger an immediate shot.
         this._playerController.syncInputState();
         this.state = GameState.PLAYING;
-        eventBus.emit(GameEvents.PLAY_MUSIC, { key: 'music_main' });
+        // Music: AudioManager listens for MENU_START_GAME and crossfades to
+        // the level-1 track defined by `musicByLevel` in sounds.json.
 
         // Level-start tutorial notifications shown sequentially
         this._notifications.reset();
@@ -149,7 +154,8 @@ class Game {
 
         eventBus.on(GameEvents.GAME_VICTORY, () => {
             this.state = GameState.VICTORY;
-            eventBus.emit(GameEvents.STOP_MUSIC);
+            // AudioManager fades the music out and plays the victory SFX
+            // off its own GAME_VICTORY listener — no STOP_MUSIC needed here.
         });
 
         // Per-level transition. The visual cross-fade is handled by

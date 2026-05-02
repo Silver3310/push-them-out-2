@@ -35,6 +35,10 @@ export class Menu {
         this.screen = SCREEN.MAIN;
         this._time  = 0;
         this._prevMouseLeft = false;
+        // Last button the cursor was hovering — used to emit
+        // MENU_BUTTON_HOVER only on the rising edge so the SFX doesn't
+        // spam every frame the cursor sits over a button.
+        this._prevHoverId   = null;
 
         const cx = GameConfig.CANVAS_WIDTH / 2;
         const startY = 320;
@@ -72,14 +76,26 @@ export class Menu {
             : null;
         this.canvas.style.cursor = hovered || this.screen !== SCREEN.MAIN ? 'pointer' : 'default';
 
+        // Rising-edge hover detection: emit only when entering a new button,
+        // not on every frame the cursor lingers (or on the cursor leaving).
+        const hoverId = hovered?.id ?? null;
+        if (hoverId !== this._prevHoverId) {
+            if (hoverId) eventBus.emit(GameEvents.MENU_BUTTON_HOVER, { id: hoverId });
+            this._prevHoverId = hoverId;
+        }
+
         if (!clicked) return;
 
         if (this.screen !== SCREEN.MAIN) {
+            // Click anywhere on a sub-screen returns to the main screen;
+            // it's a UI action so we play the click SFX too.
+            eventBus.emit(GameEvents.MENU_BUTTON_CLICK, { id: 'back' });
             this.screen = SCREEN.MAIN;
             return;
         }
         if (!hovered) return;
 
+        eventBus.emit(GameEvents.MENU_BUTTON_CLICK, { id: hovered.id });
         if (hovered.id === 'start') eventBus.emit(GameEvents.MENU_START_GAME);
         if (hovered.id === 'rules') this.screen = SCREEN.RULES;
         if (hovered.id === 'about') this.screen = SCREEN.ABOUT;
