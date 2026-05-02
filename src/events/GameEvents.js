@@ -48,6 +48,19 @@ export const GameEvents = Object.freeze({
     ASTEROID_WARNING: 'asteroid:warning', // emitted ASTEROID_WARNING_TIME seconds before a shower
     ASTEROID_HIT:     'asteroid:hit',     // emitted when an asteroid destroys an entity on impact
 
+    // Black holes
+    BLACK_HOLE_WARNING:   'blackHole:warning',   // 3-at-once storm incoming
+    BLACK_HOLE_SWALLOWED: 'blackHole:swallowed', // entity reached the kill core
+
+    // Cakes
+    CAKE_WARNING:    'cake:warning',    // 4-at-once buffet incoming
+    PLAYER_ATE_CAKE: 'player:ateCake',  // player just acquired the fat/slow status
+
+    // Bombs
+    BOMB_WARNING:  'bomb:warning',  // 4-at-once minefield incoming
+    BOMB_PRIMED:   'bomb:primed',   // a bomb just had its fuse lit
+    BOMB_EXPLODED: 'bomb:exploded', // a bomb just detonated
+
     // Menu (emitted by the Menu UI, consumed by Game)
     MENU_START_GAME: 'menu:startGame',
 

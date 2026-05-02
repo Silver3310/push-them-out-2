@@ -27,8 +27,10 @@ export class PlayerController {
         const p = this.player;
         if (!p.active || p.isInHole) return;
 
-        // WASD / arrow-key thrust
-        const t = GameConfig.PLAYER_THRUST;
+        // WASD / arrow-key thrust. Thrust input scales by the player's
+        // current movement multiplier so status effects (e.g. "fat & slow"
+        // from eating a cake) feel sluggish in line with the visual cue.
+        const t = GameConfig.PLAYER_THRUST * p.movementMultiplier;
         if (this.input.isKeyDown('KeyW')     || this.input.isKeyDown('ArrowUp'))    p.applyImpulse(0,  -t);
         if (this.input.isKeyDown('KeyS')     || this.input.isKeyDown('ArrowDown'))  p.applyImpulse(0,   t);
         if (this.input.isKeyDown('KeyA')     || this.input.isKeyDown('ArrowLeft'))  p.applyImpulse(-t,  0);

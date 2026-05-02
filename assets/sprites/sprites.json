@@ -24,6 +24,24 @@
             "width": 50,
             "height": 50
         },
+        "black_hole": {
+            "_comment": "Short-lived gravity-well hazard (level 2+). Drawn at ~1.6 x BLACK_HOLE_PULL_RADIUS (220x220 by default). The opaque black kill core is ALWAYS painted on top, so the lethal centre is visible even with a custom sprite. Replace 'src' to customise the swirl artwork.",
+            "src": "assets/sprites/objects/black_hole.png",
+            "width": 220,
+            "height": 220
+        },
+        "cake": {
+            "_comment": "Player-sized pickup hazard (level 3+). Touching one applies the 'fat & slow' debuff for CAKE_SLOW_DURATION seconds. Replace 'src' to customise the dessert artwork.",
+            "src": "assets/sprites/objects/cake.png",
+            "width": 36,
+            "height": 36
+        },
+        "bomb": {
+            "_comment": "Proximity-mine hazard (level 4+). Drawn at 2 x BOMB_BODY_RADIUS (28x28 by default). Replace 'src' to customise the bomb artwork; the explosion flash is always procedural.",
+            "src": "assets/sprites/objects/bomb.png",
+            "width": 28,
+            "height": 28
+        },
         "boss": {
             "_comment": "Final-level boss sprite. Drawn at 5x player radius (180x180 by default). Drop a PNG at assets/sprites/levels/level6/boss.png to override; missing files leave the procedural fallback in place.",
             "src": "assets/sprites/enemies/boss.png",
