@@ -13,6 +13,13 @@ export const GameEvents = Object.freeze({
     // Payload: { from: LevelConfig, to: LevelConfig }
     LEVEL_COMPLETE: 'level:complete',
 
+    // Fired by LevelManager at the MIDPOINT of a transition, the moment the
+    // active-level index flips and sprite swaps begin. Game listens to this
+    // to rebuild the enemy roster for the destination level so the swap
+    // lands in lock-step with the gradient/sprite cross-fade.
+    // Payload: { level: LevelConfig }
+    LEVEL_TRANSITION_MID: 'level:transitionMid',
+
     // Ball events
     BALL_HIT:          'ball:hit',
     BALL_FELL_IN_HOLE: 'ball:fellInHole',
