@@ -158,18 +158,25 @@ export class Renderer {
     }
 
     /**
-     * Render an urgent asteroid-shower warning overlay.
-     * Called every render frame while `countdown > 0`.
+     * Render every active hazard warning, one stacked panel per entry.
+     * Each entry pulses between full and half opacity so it catches the
+     * eye without obscuring gameplay. The countdown rounds up, so a
+     * 10-second window reads "10" at the very start and "1" in the
+     * last second.
      *
-     * The warning pulses between full and half opacity so it catches the eye
-     * without obscuring gameplay. The countdown rounds up so it reads "10"
-     * at the very start and "1" in the last second.
+     * Game.js collects warnings from each hazard manager and forwards
+     * them here in a single call, so the renderer doesn't need to know
+     * about individual hazard types.
      *
-     * @param {number} countdown - Seconds remaining (fractional, > 0).
+     * @param {{label: string, countdown: number}[]} warnings
+     *   Each entry: a short label (no leading punctuation) and the
+     *   seconds remaining until the event fires (must be > 0).
      */
-    drawAsteroidWarning(countdown) {
-        const ctx  = this.ctx;
-        const W    = GameConfig.CANVAS_WIDTH;
+    drawHazardWarnings(warnings) {
+        if (!warnings || warnings.length === 0) return;
+
+        const ctx = this.ctx;
+        const W   = GameConfig.CANVAS_WIDTH;
 
         // Pulse between 0.55 and 1.0 opacity at ~1 Hz
         const pulse = 0.55 + 0.45 * (0.5 + 0.5 * Math.sin(Date.now() * 0.006));
@@ -179,20 +186,23 @@ export class Renderer {
         ctx.textAlign    = 'center';
         ctx.textBaseline = 'middle';
 
-        // Primary warning line
-        ctx.font         = `bold 22px 'Courier New'`;
-        ctx.fillStyle    = '#ff4400';
-        ctx.shadowColor  = '#ff2200';
-        ctx.shadowBlur   = 14;
-        ctx.fillText('!! ASTEROID SHOWER INCOMING !!', W / 2, 58);
+        warnings.forEach((w, i) => {
+            const yLabel = 58 + i * 38;
+            const ySecs  = yLabel + 22;
 
-        // Countdown digit – larger and brighter to convey urgency
-        const secs = Math.ceil(countdown);
-        ctx.font        = `bold 16px 'Courier New'`;
-        ctx.fillStyle   = '#ffaa00';
-        ctx.shadowColor = '#ff8800';
-        ctx.shadowBlur  = 8;
-        ctx.fillText(`${secs}s`, W / 2, 80);
+            ctx.font         = `bold 22px 'Courier New'`;
+            ctx.fillStyle    = '#ff4400';
+            ctx.shadowColor  = '#ff2200';
+            ctx.shadowBlur   = 14;
+            ctx.fillText(`!! ${w.label} !!`, W / 2, yLabel);
+
+            const secs = Math.ceil(w.countdown);
+            ctx.font        = `bold 16px 'Courier New'`;
+            ctx.fillStyle   = '#ffaa00';
+            ctx.shadowColor = '#ff8800';
+            ctx.shadowBlur  = 8;
+            ctx.fillText(`${secs}s`, W / 2, ySecs);
+        });
 
         ctx.restore();
     }

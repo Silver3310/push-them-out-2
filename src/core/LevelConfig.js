@@ -22,6 +22,15 @@
  *                       below; controls count, abilities, sprite tint, and
  *                       the optional ability notification queued right after
  *                       `entryMessage`.
+ *   - `hazards`         Environmental hazard activation. Each flag toggles
+ *                       a hazard manager on for the level. Hazards are
+ *                       declared cumulatively by convention — once a level
+ *                       introduces a hazard, every subsequent level keeps
+ *                       it on so difficulty escalates. See `HazardConfig`
+ *                       below.
+ *   - `hazardMessages`  Optional notification text used when a NEW hazard
+ *                       is introduced on a level. Drives the slide-in
+ *                       transmission panel right after `abilityMessage`.
  *   - `spriteOverrides` Map of sprite-key → asset src. When the level becomes
  *                       active, `LevelManager` calls `SpriteManager.swapSprite`
  *                       for each entry, cross-fading the old image into the new
@@ -115,6 +124,24 @@ export const EnemyAbility = Object.freeze({
  *                                             `count` is ignored.
  */
 
+/**
+ * @typedef {object} HazardConfig
+ * @property {boolean} [asteroids]   Asteroid manager runs on this level.
+ * @property {boolean} [blackHoles]  Black-hole manager runs on this level.
+ * @property {boolean} [cakes]       Cake manager runs on this level.
+ * @property {boolean} [bombs]       Bomb manager runs on this level.
+ *
+ * Game.js applies these flags via each manager's `setEnabled`, which
+ * spawns instances when on and clears them when off.
+ */
+
+/**
+ * @typedef {object} HazardMessages
+ * @property {string} [blackHoles]  Shown when black holes are first introduced.
+ * @property {string} [cakes]       Shown when cakes are first introduced.
+ * @property {string} [bombs]       Shown when bombs are first introduced.
+ */
+
 /** Frozen list of level configurations, in play order. */
 export const LEVELS = Object.freeze([
     {
@@ -136,6 +163,13 @@ export const LEVELS = Object.freeze([
             color:          '#ffe066',
             abilityMessage: null,
         },
+        hazards: {
+            asteroids:  true,
+            blackHoles: false,
+            cakes:      false,
+            bombs:      false,
+        },
+        hazardMessages: {},
         spriteOverrides: LEVEL_1_SPRITE_OVERRIDES,
     },
     {
@@ -155,6 +189,15 @@ export const LEVELS = Object.freeze([
             abilities:      [EnemyAbility.SPIKED],
             color:          '#4fb8ff',
             abilityMessage: 'Heads up! Enemies now have spikes — touching one is fatal.',
+        },
+        hazards: {
+            asteroids:  true,
+            blackHoles: true,
+            cakes:      false,
+            bombs:      false,
+        },
+        hazardMessages: {
+            blackHoles: 'New hazard: black holes! Stay clear — the centre is fatal.',
         },
         spriteOverrides: _spritesForLevelDir('level2'),
     },
@@ -176,6 +219,15 @@ export const LEVELS = Object.freeze([
             color:          '#ff7a3f',
             abilityMessage: 'Watch out! Enemies can now shoot — bullets push you around.',
         },
+        hazards: {
+            asteroids:  true,
+            blackHoles: true,
+            cakes:      true,
+            bombs:      false,
+        },
+        hazardMessages: {
+            cakes: 'Cakes look tasty… but eating one slows you down for 4 seconds!',
+        },
         spriteOverrides: _spritesForLevelDir('level3'),
     },
     {
@@ -195,6 +247,15 @@ export const LEVELS = Object.freeze([
             abilities:      [EnemyAbility.SPIKED, EnemyAbility.SHOOTER],
             color:          '#ff5577',
             abilityMessage: 'Spiked AND shooting — keep your distance!',
+        },
+        hazards: {
+            asteroids:  true,
+            blackHoles: true,
+            cakes:      true,
+            bombs:      true,
+        },
+        hazardMessages: {
+            bombs: 'Bombs! They detonate when anything gets too close — mind the blast!',
         },
         spriteOverrides: _spritesForLevelDir('level4'),
     },
@@ -216,6 +277,13 @@ export const LEVELS = Object.freeze([
             color:          '#cc66ff',
             abilityMessage: 'They are even more aggressive — be quick!',
         },
+        hazards: {
+            asteroids:  true,
+            blackHoles: true,
+            cakes:      true,
+            bombs:      true,
+        },
+        hazardMessages: {},
         spriteOverrides: _spritesForLevelDir('level5'),
     },
     {
@@ -237,6 +305,13 @@ export const LEVELS = Object.freeze([
             color:          '#ff2244',
             abilityMessage: 'FINAL BOSS! Spikes, shots, dashes, and deadly rays.',
         },
+        hazards: {
+            asteroids:  true,
+            blackHoles: true,
+            cakes:      true,
+            bombs:      true,
+        },
+        hazardMessages: {},
         spriteOverrides: {
             ..._spritesForLevelDir('level6'),
             // The boss key isn't in LEVEL_SPRITE_KEYS because it is only

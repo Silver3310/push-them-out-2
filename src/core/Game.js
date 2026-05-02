@@ -20,6 +20,9 @@ import { Hole }        from '../entities/objects/Hole.js';
 import { Planet }      from '../entities/objects/Planet.js';
 import { Star }            from '../entities/objects/Star.js';
 import { AsteroidManager }      from '../logic/AsteroidManager.js';
+import { BlackHoleManager }     from '../logic/BlackHoleManager.js';
+import { CakeManager }          from '../logic/CakeManager.js';
+import { BombManager }          from '../logic/BombManager.js';
 import { Menu }                 from '../ui/Menu.js';
 import { NotificationManager }  from '../ui/NotificationManager.js';
 
@@ -68,9 +71,13 @@ class Game {
         // time the enemy roster is rebuilt; null on non-boss levels.
         this._boss = null;
 
-        // Asteroid system – initialised after sprites are loaded so the manager
-        // can pass the SpriteManager reference through to each Asteroid instance.
-        this._asteroidManager = null;
+        // Hazard managers – initialised after sprites are loaded so each manager
+        // can forward the SpriteManager reference to its entity instances.
+        // Per-level activation is driven by `LEVELS[i].hazards` (see LevelConfig).
+        this._asteroidManager  = null;
+        this._blackHoleManager = null;
+        this._cakeManager      = null;
+        this._bombManager      = null;
 
         this.menu           = null;
         this._notifications = null;
@@ -147,9 +154,10 @@ class Game {
 
         // Per-level transition. The visual cross-fade is handled by
         // LevelManager (started here via advance()); the player sees up to
-        // two notifications: the goal announcement and an optional ability
-        // warning queued right after.
-        eventBus.on(GameEvents.LEVEL_COMPLETE, ({ to }) => {
+        // a small queue of notifications: the goal announcement, the
+        // optional enemy-ability warning, and one notification per
+        // newly-introduced hazard.
+        eventBus.on(GameEvents.LEVEL_COMPLETE, ({ from, to }) => {
             this.levels.advance();
             this.score.startNewLevel();
             if (to?.entryMessage) {
@@ -158,13 +166,15 @@ class Game {
             if (to?.enemies?.abilityMessage) {
                 eventBus.emit(GameEvents.SHOW_NOTIFICATION, { message: to.enemies.abilityMessage });
             }
+            this._announceNewHazards(from, to);
         });
 
-        // Enemy roster swap is timed to the visual midpoint of the
-        // cross-fade so the new threats appear in lock-step with the new
-        // gradient and sprite set.
+        // Enemy roster swap and hazard re-arming are timed to the visual
+        // midpoint of the cross-fade so the new threats appear in lock-step
+        // with the new gradient and sprite set.
         eventBus.on(GameEvents.LEVEL_TRANSITION_MID, ({ level }) => {
             this._rebuildEnemies(level);
+            this._applyHazardFlags(level);
         });
 
         // ESC: in menu sub-screens go back; otherwise toggle pause
@@ -223,12 +233,49 @@ class Game {
             this._spawnStar();
         }
 
-        // Asteroid system – reset (or create) so a fresh cycle begins each game
+        // Hazard managers – reset (or create) so a fresh cycle begins each game.
+        // BlackHole/Cake/Bomb managers receive a `getObstacles` closure so their
+        // safe-spawn checks can avoid the existing planets and pocket holes
+        // without each manager needing a hard reference to Game state.
+        const obstacleProvider = () => [...this.holes, ...this.planets];
+
+        if (this._asteroidManager)  this._asteroidManager.reset();
+        else this._asteroidManager  = new AsteroidManager(this.sprites);
+
+        if (this._blackHoleManager) this._blackHoleManager.reset();
+        else this._blackHoleManager = new BlackHoleManager(this.sprites, { getObstacles: obstacleProvider });
+
+        if (this._cakeManager)      this._cakeManager.reset();
+        else this._cakeManager      = new CakeManager(this.sprites, { getObstacles: obstacleProvider });
+
+        if (this._bombManager)      this._bombManager.reset();
+        else this._bombManager      = new BombManager(this.sprites, { getObstacles: obstacleProvider });
+
+        // Apply the starting level's hazard flags so managers are correctly
+        // armed/silent before the first frame.
+        this._applyHazardFlags(this.levels.current);
+    }
+
+    /**
+     * Toggle each hazard manager on/off according to `level.hazards`.
+     * Called on initial build and from the LEVEL_TRANSITION_MID listener
+     * so the new hazard set arms in lock-step with the visual cross-fade.
+     */
+    _applyHazardFlags(level) {
+        const h = level?.hazards ?? {};
+        // Asteroids ran on every level historically; respect the explicit
+        // flag if set, otherwise default to true to preserve that behaviour.
+        const asteroidsOn = h.asteroids !== false;
         if (this._asteroidManager) {
-            this._asteroidManager.reset();
-        } else {
-            this._asteroidManager = new AsteroidManager(this.sprites);
+            // AsteroidManager pre-dates the enable/disable API. It always
+            // runs today, so we just leave it alone when on; if a future
+            // level wants to silence it, calling reset() is the cleanest
+            // way to clear the field.
+            if (!asteroidsOn) this._asteroidManager.reset();
         }
+        this._blackHoleManager?.setEnabled(!!h.blackHoles);
+        this._cakeManager?.setEnabled(!!h.cakes);
+        this._bombManager?.setEnabled(!!h.bombs);
     }
 
     /**
@@ -285,6 +332,22 @@ class Game {
 
     addBullet(bullet) {
         this.bullets.push(bullet);
+    }
+
+    /**
+     * Queue a SHOW_NOTIFICATION for every hazard newly enabled on `to`
+     * (i.e. flipped from off in `from`). Uses `to.hazardMessages[key]`
+     * for the message text; missing entries skip silently.
+     */
+    _announceNewHazards(from, to) {
+        const fromH = from?.hazards ?? {};
+        const toH   = to?.hazards   ?? {};
+        const messages = to?.hazardMessages ?? {};
+        for (const key of Object.keys(toH)) {
+            if (toH[key] && !fromH[key] && messages[key]) {
+                eventBus.emit(GameEvents.SHOW_NOTIFICATION, { message: messages[key] });
+            }
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -426,8 +489,15 @@ class Game {
         // Boss-specific damage: anything in the firing ray dies.
         this._handleBossRayKills();
 
-        // Advance asteroids and resolve their impacts against game entities
+        // Advance environmental hazards and resolve their interactions.
+        // Order matters: black holes apply force BEFORE asteroids/bombs so
+        // a captured ball that's on its way to the kill core also still
+        // takes any other hazard contact this frame; bombs run after pulls
+        // so a "pulled then blasted" combination resolves naturally.
+        this._updateBlackHoles(dt);
         this._updateAsteroids(dt);
+        this._updateCakes(dt);
+        this._updateBombs(dt);
 
         // Keep audio listener at player position for spatial sound
         const p = this.players[0];
@@ -587,6 +657,159 @@ class Game {
         }
     }
 
+    /**
+     * Drive {@link BlackHoleManager}: tick lifespans, then for each live
+     * black hole apply spiral pull to nearby balls. Crossing the kill core
+     * destroys the entity along the same paths used by holes:
+     *
+     *   - Player → `_killPlayer` (death + 2s respawn + invulnerability)
+     *   - Enemy  → `enemy.die()` + 3s respawn (skip bosses, who shrug it off)
+     *   - Star   → permanently removed and counted as lost
+     *   - Asteroid → simply destroyed (silently absorbed)
+     */
+    _updateBlackHoles(dt) {
+        if (!this._blackHoleManager) return;
+        const W = GameConfig.CANVAS_WIDTH;
+        const H = GameConfig.CANVAS_HEIGHT;
+
+        this._blackHoleManager.update(dt, W, H);
+
+        const blackHoles = this._blackHoleManager.blackHoles;
+        if (blackHoles.length === 0) return;
+
+        // Build the impact-target lists once per tick so each black hole
+        // doesn't re-walk the entity arrays for itself.
+        const players  = this.players;
+        const enemies  = this.enemies;
+        const stars    = this.stars;
+        const asteroids = this._asteroidManager?.asteroids ?? [];
+
+        for (const bh of blackHoles) {
+            for (const player of players) {
+                if (!player.active || player.isInHole) continue;
+                const result = bh.affect(player);
+                if (result === 'kill' && !player.isInvulnerable) {
+                    this._killPlayer(player);
+                    eventBus.emit(GameEvents.BLACK_HOLE_SWALLOWED, { blackHole: bh, target: player });
+                }
+            }
+
+            for (const enemy of enemies) {
+                if (!enemy.active || enemy.isInHole) continue;
+                // Bosses are too massive — same rule as for asteroids.
+                if (enemy.hasTag('boss')) continue;
+                const result = bh.affect(enemy);
+                if (result === 'kill') {
+                    enemy.die();
+                    this.score.recordEnemyKill();
+                    setTimeout(() => { if (!enemy.active) return; enemy.respawn(); }, 3000);
+                    eventBus.emit(GameEvents.BLACK_HOLE_SWALLOWED, { blackHole: bh, target: enemy });
+                }
+            }
+
+            for (const star of stars) {
+                if (!star.active || star.isInHole) continue;
+                const result = bh.affect(star);
+                if (result === 'kill') {
+                    star.destroy();
+                    this.score.recordStarLost();
+                    eventBus.emit(GameEvents.BLACK_HOLE_SWALLOWED, { blackHole: bh, target: star });
+                }
+            }
+
+            for (const asteroid of asteroids) {
+                if (!asteroid.active) continue;
+                const result = bh.affect(asteroid);
+                if (result === 'kill') {
+                    asteroid.destroy();
+                    eventBus.emit(GameEvents.BLACK_HOLE_SWALLOWED, { blackHole: bh, target: asteroid });
+                }
+            }
+        }
+    }
+
+    /**
+     * Drive {@link CakeManager}: detect player overlap with each cake and
+     * apply the "fat & slow" status. Cakes have no effect on enemies — by
+     * design only the player can be tempted into eating one.
+     */
+    _updateCakes(dt) {
+        if (!this._cakeManager) return;
+        const W = GameConfig.CANVAS_WIDTH;
+        const H = GameConfig.CANVAS_HEIGHT;
+
+        this._cakeManager.update(dt, W, H);
+
+        const player = this.players[0];
+        if (!player || !player.active || player.isInHole) return;
+
+        for (const cake of this._cakeManager.cakes) {
+            if (!cake.active) continue;
+            const dx = player.x - cake.x;
+            const dy = player.y - cake.y;
+            const minDist = player.radius + cake.radius;
+            if (dx * dx + dy * dy >= minDist * minDist) continue;
+
+            cake.destroy();
+            player.applyFatSlow(GameConfig.CAKE_SLOW_DURATION);
+            // PLAYER_ATE_CAKE is emitted by Player.applyFatSlow; no need to
+            // duplicate it here.
+        }
+    }
+
+    /**
+     * Drive {@link BombManager}: tick fuses, prime any bomb whose trigger
+     * radius contains a live ball, and apply explosion impulse to nearby
+     * balls the moment a bomb transitions to the `exploded` state.
+     */
+    _updateBombs(dt) {
+        if (!this._bombManager) return;
+        const W = GameConfig.CANVAS_WIDTH;
+        const H = GameConfig.CANVAS_HEIGHT;
+
+        this._bombManager.update(dt, W, H);
+
+        // Eligible "trigger" balls: anyone the bomb should react to.
+        // Stars and asteroids are intentionally NOT triggers — only
+        // active players and non-boss enemies.
+        const triggers = [
+            ...this.players.filter(p => p.active && !p.isInHole),
+            ...this.enemies.filter(e => e.active && !e.isInHole && !e.hasTag('boss')),
+        ];
+
+        // Blast targets: also include stars so a bomb can blow them away
+        // (no score change, just chaos), but skip bosses for the same
+        // reason asteroids skip them.
+        const blastTargets = [
+            ...this.players.filter(p => p.active && !p.isInHole),
+            ...this.enemies.filter(e => e.active && !e.isInHole && !e.hasTag('boss')),
+            ...this.stars  .filter(s => s.active && !s.isInHole),
+        ];
+
+        for (const bomb of this._bombManager.bombs) {
+            if (!bomb.active) continue;
+
+            if (bomb.state === 'idle') {
+                // Trigger check — any ball inside the trigger radius lights the fuse.
+                const triggerSq = bomb.triggerRadius * bomb.triggerRadius;
+                for (const ball of triggers) {
+                    const dx = ball.x - bomb.x;
+                    const dy = ball.y - bomb.y;
+                    if (dx * dx + dy * dy < triggerSq) {
+                        bomb.prime();
+                        eventBus.emit(GameEvents.BOMB_PRIMED, { bomb, trigger: ball });
+                        break;
+                    }
+                }
+            } else if (bomb.state === 'exploded' && !bomb._dispatched) {
+                // First frame of detonation — apply the impulse exactly once.
+                bomb._dispatched = true;
+                const hit = bomb.consume(blastTargets);
+                eventBus.emit(GameEvents.BOMB_EXPLODED, { bomb, hit });
+            }
+        }
+    }
+
     _checkBulletEnemyCollision(bullet, enemy) {
         const dx = enemy.x - bullet.x;
         const dy = enemy.y - bullet.y;
@@ -690,6 +913,15 @@ class Game {
         // Stars render under entities so they appear as ground-level pickups
         this.stars.forEach(s => s.render(ctx));
 
+        // Cakes and bombs render under enemies/player so the player ball
+        // visibly sits ON TOP of the pickup it's about to hit.
+        this._cakeManager?.cakes.forEach(c => c.render(ctx));
+        this._bombManager?.bombs.forEach(b => b.render(ctx));
+
+        // Black holes render under entities so the player ball appears to
+        // be visibly drawn into the void rather than hidden behind it.
+        this._blackHoleManager?.blackHoles.forEach(bh => bh.render(ctx));
+
         [...this.enemies, ...this.players].forEach(b => b.render(ctx));
         this.bullets.forEach(b => b.render(ctx));
 
@@ -707,12 +939,30 @@ class Game {
         );
         this.renderer.drawControls();
 
-        // Warning overlay sits above HUD elements to be impossible to miss
-        const countdown = this._asteroidManager?.warningCountdown ?? 0;
-        if (countdown > 0) this.renderer.drawAsteroidWarning(countdown);
+        // Warning overlays stack vertically above the HUD. Each manager
+        // contributes one entry when its shower is imminent.
+        this.renderer.drawHazardWarnings(this._collectHazardWarnings());
 
         if (this.state === GameState.PAUSED)  this._renderPauseScreen(ctx);
         if (this.state === GameState.VICTORY) this._renderVictoryScreen(ctx);
+    }
+
+    /**
+     * Snapshot every hazard manager's `warningCountdown` as the renderer
+     * input list. Empty list → no overlay drawn.
+     * @returns {{label: string, countdown: number}[]}
+     */
+    _collectHazardWarnings() {
+        const warnings = [];
+        const ast = this._asteroidManager?.warningCountdown  ?? 0;
+        if (ast > 0) warnings.push({ label: 'ASTEROID SHOWER INCOMING', countdown: ast });
+        const bh  = this._blackHoleManager?.warningCountdown ?? 0;
+        if (bh  > 0) warnings.push({ label: 'BLACK HOLE STORM INCOMING', countdown: bh });
+        const cake = this._cakeManager?.warningCountdown    ?? 0;
+        if (cake > 0) warnings.push({ label: 'CAKE BUFFET INCOMING',     countdown: cake });
+        const bomb = this._bombManager?.warningCountdown    ?? 0;
+        if (bomb > 0) warnings.push({ label: 'MINEFIELD INCOMING',       countdown: bomb });
+        return warnings;
     }
 
     _renderPauseScreen(ctx) {

@@ -86,6 +86,48 @@ export const GameConfig = Object.freeze({
     ASTEROID_SHOWER_SIZE_MAX:   7,   // maximum asteroids in a shower burst
     ASTEROID_WARNING_TIME:     10,   // seconds before a shower that the warning fires
 
+    // Black holes (introduced level 2)
+    // A black hole lives BLACK_HOLE_LIFESPAN seconds and pulls everything
+    // inside PULL_RADIUS toward its centre with a spiral force. Crossing
+    // KILL_RADIUS is fatal regardless of the entity type.
+    BLACK_HOLE_PULL_RADIUS:        140,
+    BLACK_HOLE_KILL_RADIUS:         18,
+    BLACK_HOLE_PULL_FORCE:        0.55,  // radial impulse per tick (scaled by falloff)
+    BLACK_HOLE_SWIRL_FORCE:       0.85,  // tangential impulse — drives the spiral
+    BLACK_HOLE_LIFESPAN:           3.0,  // seconds on screen before vanishing
+    BLACK_HOLE_SPAWN_INTERVAL:    12.0,  // seconds between solo (non-storm) spawns
+    BLACK_HOLE_STORM_INTERVAL:    60.0,  // seconds between 3-at-once storm events
+    BLACK_HOLE_STORM_SIZE:           3,
+    BLACK_HOLE_WARNING_TIME:       8.0,  // lead-in seconds for the on-screen warning
+
+    // Cakes (introduced level 3)
+    // Cakes are static, player-sized pickups. Touching one applies a
+    // "fat & slow" debuff for CAKE_SLOW_DURATION seconds — the player
+    // grows by CAKE_FAT_RADIUS_MULTIPLIER and moves at
+    // CAKE_SLOW_MULTIPLIER × normal thrust/max speed.
+    CAKE_SLOW_DURATION:           4.0,
+    CAKE_SLOW_MULTIPLIER:        0.4,
+    CAKE_FAT_RADIUS_MULTIPLIER:  1.6,
+    CAKE_RESPAWN_DELAY:           5.0,  // seconds between solo spawns
+    CAKE_BUFFET_INTERVAL:        70.0,  // seconds between 4-at-once events
+    CAKE_BUFFET_SIZE:                4,
+    CAKE_WARNING_TIME:            7.0,
+
+    // Bombs (introduced level 4)
+    // Bombs sit inert until any ball enters BOMB_TRIGGER_RADIUS, then they
+    // burn a fuse and explode, applying BOMB_EXPLOSION_FORCE outward to
+    // every ball inside BOMB_EXPLOSION_RADIUS.
+    BOMB_BODY_RADIUS:                14,  // visual sphere radius
+    BOMB_TRIGGER_RADIUS:             58,  // proximity trigger
+    BOMB_EXPLOSION_RADIUS:          150,  // outward impulse blast radius
+    BOMB_FUSE_DURATION:            0.55,  // seconds between trigger and detonation
+    BOMB_EXPLOSION_FORCE:           120,  // peak impulse magnitude (falls off to 0 at edge)
+    BOMB_EXPLOSION_FLASH_DURATION: 0.45,  // seconds the flash sprite remains
+    BOMB_RESPAWN_DELAY:            6.0,  // seconds between solo spawns
+    BOMB_FIELD_INTERVAL:          80.0,  // seconds between 4-at-once minefield events
+    BOMB_FIELD_SIZE:                  4,
+    BOMB_WARNING_TIME:             7.0,
+
     // Sprite auto-scale: all sprite sizes are authored for this reference resolution
     SPRITE_REFERENCE_WIDTH:  1280,
     SPRITE_REFERENCE_HEIGHT: 720,
