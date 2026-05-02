@@ -7,10 +7,30 @@ const AIBehavior = Object.freeze({
     WANDER:      'WANDER',
 });
 
+/**
+ * Drives an Enemy entity. Decisions are reconsidered on a fixed cadence
+ * (`ENEMY_AI_THINK_INTERVAL`) and the chosen behaviour is executed each
+ * frame as a small steering impulse.
+ *
+ * If the enemy has the SHOOTER ability, the controller also calls
+ * `enemy.fireAt(target)` whenever the cooldown is ready and forwards the
+ * returned bullet to the supplied game reference. The decoupling lets the
+ * Enemy class own its weapon state machine while the controller still
+ * decides who to shoot at.
+ */
 export class AIController {
-    constructor(enemy, worldRef) {
+    /**
+     * @param {Enemy} enemy
+     * @param {{holes: Hole[], players: Player[]}} worldRef
+     * @param {{ addBullet(bullet: Bullet): void }|null} [gameRef]
+     *     Required for shooter enemies so they can publish bullets to the
+     *     world. Pass `null` for non-shooting enemies if you want to skip
+     *     wiring it.
+     */
+    constructor(enemy, worldRef, gameRef = null) {
         this.enemy      = enemy;
-        this.world      = worldRef; // { holes: Hole[], players: Player[] }
+        this.world      = worldRef;
+        this._game      = gameRef;
         this.behavior   = AIBehavior.WANDER;
         this.thinkTimer = 0;
         this._seekTarget = null;
@@ -28,6 +48,7 @@ export class AIController {
             this._decide();
         }
         this._execute();
+        this._maybeFire();
     }
 
     _decide() {
@@ -84,5 +105,18 @@ export class AIController {
         if (dist > 5) {
             e.applyImpulse((dx / dist) * speed, (dy / dist) * speed);
         }
+    }
+
+    /**
+     * If the enemy has the SHOOTER ability and the cooldown is ready, fire
+     * a bullet aimed at the current seek target. No-op for non-shooters.
+     */
+    _maybeFire() {
+        if (!this._game) return;
+        if (!this.enemy.canFire) return;
+        const target = this._seekTarget;
+        if (!target || !target.active || target.isInHole) return;
+        const bullet = this.enemy.fireAt(target);
+        if (bullet) this._game.addBullet(bullet);
     }
 }
