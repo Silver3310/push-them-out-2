@@ -1,14 +1,15 @@
 {
-    "version": "1.0.0",
+    "version": "1.1.0",
     "_comment": "Swap any sprite by changing 'src' to a new path. Sizes are in authored-resolution pixels (1280x720). SpriteManager auto-scales them to the actual canvas size.",
     "_levels_comment": "Per-level sprite overrides are declared in src/core/LevelConfig.js and applied by LevelManager via SpriteManager.swapSprite at the midpoint of each cross-fade. The convention is: drop a PNG at assets/sprites/levels/levelN/<key>.png (e.g. assets/sprites/levels/level3/asteroid.png) and it will load when level N becomes active. Missing files keep the previous level's sprite (or the procedural fallback if none has ever loaded).",
+    "_planets_comment": "Each LEVELS[i] in src/core/LevelConfig.js declares a `planetSprites` array of six sprite keys — one per planet slot — and a `planetPalette` of six colours. The matching colour is applied as a TINT to the sprite via the SpriteManager's multiply-blend pass, so a single black/white planet PNG can be reused across slots and levels and the gradient cross-fade automatically recolours it. Missing PNGs fall back to the procedural radial-gradient body, so none of these files are required for the game to run.",
     "sprites": {
         "player_ball":   { "src": "assets/sprites/players/player_ball.png",   "width": 36,  "height": 36  },
         "enemy_ball":    { "src": "assets/sprites/enemies/enemy_ball.png",    "width": 36,  "height": 36  },
-        "planet_green":  { "src": "assets/sprites/objects/planet_green.png",  "width": 110, "height": 110 },
-        "planet_orange": { "src": "assets/sprites/objects/planet_orange.png", "width": 80,  "height": 80  },
-        "planet_blue":   { "src": "assets/sprites/objects/planet_blue.png",   "width": 80,  "height": 80  },
-        "planet_pink":   { "src": "assets/sprites/objects/planet_pink.png",   "width": 90,  "height": 90  },
+        "planet_green":  { "src": "assets/sprites/objects/planet_green.png",  "width": 110, "height": 110, "_comment": "Tinted at runtime with the matching planetPalette colour. Black/white sprites recommended; transparent background required." },
+        "planet_orange": { "src": "assets/sprites/objects/planet_orange.png", "width": 80,  "height": 80,  "_comment": "Tinted at runtime — see planet_green." },
+        "planet_blue":   { "src": "assets/sprites/objects/planet_blue.png",   "width": 80,  "height": 80,  "_comment": "Tinted at runtime — see planet_green." },
+        "planet_pink":   { "src": "assets/sprites/objects/planet_pink.png",   "width": 90,  "height": 90,  "_comment": "Tinted at runtime — see planet_green." },
         "hole":          { "src": "assets/sprites/objects/hole.png",          "width": 40,  "height": 40  },
         "star_collectible": {
             "_comment": "Collectible star entity. Replace 'src' with any 20x20 (or larger square) PNG to customise the look. The image is rotated automatically; transparent background recommended.",

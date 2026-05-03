@@ -274,6 +274,12 @@ export class AudioManager {
             eventBus.on(ev, () => this.playSfx('warning'));
         }
 
+        // Per-spawn telegraph (yellow warning circle). Spatialised at the
+        // future spawn point so the player can localise the threat by ear.
+        eventBus.on(GameEvents.SPAWN_WARNING, ({ x, y }) => {
+            this.playSfx('warning', x, y);
+        });
+
         // Notification panel slide-in
         eventBus.on(GameEvents.SHOW_NOTIFICATION, () => this.playSfx('notification'));
 

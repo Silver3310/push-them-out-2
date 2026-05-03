@@ -182,26 +182,65 @@ export class SpriteManager {
         ctx.save();
         if (options.alpha !== undefined) ctx.globalAlpha = options.alpha;
 
+        // Tinted path: build the tinted bitmap on an off-screen buffer so
+        // the multiply operation is constrained to the sprite's own alpha
+        // channel. Doing the multiply directly on `ctx` would leak the tint
+        // into the sprite's transparent regions (bleeding onto whatever was
+        // already drawn behind it). Black/white sprite art tints cleanly:
+        // black stays black, white adopts the tint colour.
+        const drawable = options.tint
+            ? _buildTintedBitmap(img, w, h, options.tint)
+            : img;
+
         if (options.rotation) {
             ctx.translate(x, y);
             ctx.rotate(options.rotation);
-            ctx.drawImage(img, -w / 2, -h / 2, w, h);
+            ctx.drawImage(drawable, -w / 2, -h / 2, w, h);
         } else {
-            ctx.drawImage(img, x - w / 2, y - h / 2, w, h);
-        }
-
-        if (options.tint) {
-            ctx.globalCompositeOperation = 'multiply';
-            ctx.fillStyle = options.tint;
-            if (options.rotation) {
-                ctx.fillRect(-w / 2, -h / 2, w, h);
-            } else {
-                ctx.fillRect(x - w / 2, y - h / 2, w, h);
-            }
+            ctx.drawImage(drawable, x - w / 2, y - h / 2, w, h);
         }
 
         ctx.restore();
     }
+}
+
+// ---------------------------------------------------------------------------
+// Tint helper: shared off-screen buffer reused across calls so we don't
+// allocate a fresh canvas every frame. Resized lazily as needed.
+// ---------------------------------------------------------------------------
+
+let _tintBuffer = null;
+
+/**
+ * Return a canvas containing `img` multiplied by `tint`, with the sprite's
+ * own alpha channel preserved (transparent pixels stay transparent). The
+ * returned canvas is the shared module buffer — callers must not retain
+ * a reference past the current draw call.
+ */
+function _buildTintedBitmap(img, w, h, tint) {
+    if (!_tintBuffer) {
+        _tintBuffer = (typeof OffscreenCanvas !== 'undefined')
+            ? new OffscreenCanvas(1, 1)
+            : document.createElement('canvas');
+    }
+    if (_tintBuffer.width !== w || _tintBuffer.height !== h) {
+        _tintBuffer.width  = w;
+        _tintBuffer.height = h;
+    }
+    const bctx = _tintBuffer.getContext('2d');
+    bctx.globalCompositeOperation = 'source-over';
+    bctx.clearRect(0, 0, w, h);
+    bctx.drawImage(img, 0, 0, w, h);
+    // Multiply tint over the sprite. This leaks into transparent regions;
+    // we mask back below.
+    bctx.globalCompositeOperation = 'multiply';
+    bctx.fillStyle = tint;
+    bctx.fillRect(0, 0, w, h);
+    // Restore the original alpha channel — keeps only the pixels where the
+    // sprite itself had non-zero alpha, discarding the leaked tint.
+    bctx.globalCompositeOperation = 'destination-in';
+    bctx.drawImage(img, 0, 0, w, h);
+    return _tintBuffer;
 }
 
 // ---------------------------------------------------------------------------

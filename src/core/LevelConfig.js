@@ -17,7 +17,16 @@
  *                       between levels.
  *   - `planetPalette`   Six colours assigned in order to the six obstacle
  *                       planets. Lerped during transitions so the planets
- *                       recolour smoothly along with the background.
+ *                       recolour smoothly along with the background. Doubles
+ *                       as the sprite TINT colour when the planet has a
+ *                       sprite assigned — black/white planet art automatically
+ *                       picks up the level palette.
+ *   - `planetSprites`   Six sprite keys (matching entries in
+ *                       `assets/sprites/sprites.json`), one per planet slot.
+ *                       Each Planet draws its sprite tinted with the matching
+ *                       `planetPalette` colour, so a single black/white sprite
+ *                       can be reused as multiple coloured planets. Defaults
+ *                       to `DEFAULT_PLANET_SPRITES` when omitted.
  *   - `enemies`         Enemy roster for the level. See `EnemyLevelConfig`
  *                       below; controls count, abilities, sprite tint, and
  *                       the optional ability notification queued right after
@@ -38,7 +47,12 @@
  *                       files keep the previous level's sprite (or the
  *                       procedural fallback when no asset has ever loaded).
  *                       Every level — including L1 — declares its own paths so
- *                       replays restore the default look correctly.
+ *                       replays restore the default look correctly. Planet
+ *                       sprite keys (`planet_green`, `planet_orange`,
+ *                       `planet_blue`, `planet_pink`) participate in the same
+ *                       mechanism: drop a PNG at
+ *                       `assets/sprites/levels/levelN/<key>.png` and add it
+ *                       here to swap the artwork for that level.
  *
  * The player NEVER sees a level-up modal — transitions are purely visual.
  * The on-screen acknowledgement is up to two `SHOW_NOTIFICATION` events:
@@ -64,14 +78,40 @@ const LEVEL_SPRITE_ROOT = 'assets/sprites/levels';
 
 /**
  * Sprite keys that each level can override. These correspond to entities
- * whose `render()` consults `SpriteManager` (Star, Asteroid, Enemy). Drop a
- * matching PNG at `assets/sprites/levels/levelN/<key>.png` to customise the
- * look for that level.
+ * whose `render()` consults `SpriteManager` (Star, Asteroid, Enemy, Planet).
+ * Drop a matching PNG at `assets/sprites/levels/levelN/<key>.png` to
+ * customise the look for that level.
+ *
+ * The four planet keys are listed alongside the gameplay-entity keys so the
+ * conventional per-level directory pattern works for them too: drop e.g.
+ * `assets/sprites/levels/level3/planet_green.png` and L3's green planets
+ * will pick up the new artwork during the cross-fade.
  */
 const LEVEL_SPRITE_KEYS = Object.freeze([
     'star_collectible',
     'asteroid',
     'enemy_ball',
+    'planet_green',
+    'planet_orange',
+    'planet_blue',
+    'planet_pink',
+]);
+
+/**
+ * Default sprite key assignment for the six planet slots, in render order.
+ * Levels that don't declare their own `planetSprites` use this layout.
+ *
+ * The naming is historical (the colour suffixes describe the *original*
+ * untinted artwork) — every entry can be tinted with any palette colour
+ * via `planetPalette`, so "planet_green" doesn't have to look green.
+ */
+const DEFAULT_PLANET_SPRITES = Object.freeze([
+    'planet_green',
+    'planet_green',
+    'planet_orange',
+    'planet_blue',
+    'planet_pink',
+    'planet_green',
 ]);
 
 /**
@@ -94,6 +134,10 @@ const LEVEL_1_SPRITE_OVERRIDES = Object.freeze({
     star_collectible: 'assets/sprites/objects/star_collectible.png',
     asteroid:         'assets/sprites/objects/asteroid.png',
     enemy_ball:       'assets/sprites/enemies/enemy_ball.png',
+    planet_green:     'assets/sprites/objects/planet_green.png',
+    planet_orange:    'assets/sprites/objects/planet_orange.png',
+    planet_blue:      'assets/sprites/objects/planet_blue.png',
+    planet_pink:      'assets/sprites/objects/planet_pink.png',
 });
 
 /**
@@ -142,6 +186,13 @@ export const EnemyAbility = Object.freeze({
  * @property {string} [bombs]       Shown when bombs are first introduced.
  */
 
+/**
+ * Default planet-slot sprite assignment used when a level omits
+ * `planetSprites`. Re-exported so callers (and tests) can reference the
+ * canonical mapping without copy-pasting strings.
+ */
+export const DEFAULT_PLANET_SPRITE_KEYS = DEFAULT_PLANET_SPRITES;
+
 /** Frozen list of level configurations, in play order. */
 export const LEVELS = Object.freeze([
     {
@@ -157,6 +208,11 @@ export const LEVELS = Object.freeze([
             borderShadow: '#9900cc',
         },
         planetPalette:   ['#c8e06e', '#c8e06e', '#e0a06e', '#6ec8e0', '#e06ec8', '#c8e06e'],
+        // Each planet uses the manifest sprite that historically matched its
+        // palette colour. Designers are free to swap these for any other key
+        // declared in `assets/sprites/sprites.json` — the tint comes from
+        // `planetPalette`, so the look reskins automatically.
+        planetSprites:   ['planet_green', 'planet_green', 'planet_orange', 'planet_blue', 'planet_pink', 'planet_green'],
         enemies: {
             count:          2,
             abilities:      [],
@@ -184,6 +240,7 @@ export const LEVELS = Object.freeze([
             borderShadow: '#ff66cc',
         },
         planetPalette:   ['#e066c8', '#a866ff', '#66c8ff', '#ff66e0', '#9966ff', '#e066c8'],
+        planetSprites:   DEFAULT_PLANET_SPRITES,
         enemies: {
             count:          2,
             abilities:      [EnemyAbility.SPIKED],
@@ -213,6 +270,7 @@ export const LEVELS = Object.freeze([
             borderShadow: '#ffcc66',
         },
         planetPalette:   ['#ff66aa', '#ffffff', '#ffe066', '#88ff88', '#ff8866', '#cc66ff'],
+        planetSprites:   DEFAULT_PLANET_SPRITES,
         enemies: {
             count:          2,
             abilities:      [EnemyAbility.SHOOTER],
@@ -242,6 +300,7 @@ export const LEVELS = Object.freeze([
             borderShadow: '#ff6633',
         },
         planetPalette:   ['#a8442a', '#7a2818', '#d8884a', '#a8442a', '#c46838', '#7a2818'],
+        planetSprites:   DEFAULT_PLANET_SPRITES,
         enemies: {
             count:          2,
             abilities:      [EnemyAbility.SPIKED, EnemyAbility.SHOOTER],
@@ -271,6 +330,7 @@ export const LEVELS = Object.freeze([
             borderShadow: '#5566ee',
         },
         planetPalette:   ['#4a5cb0', '#222c66', '#7888d0', '#3344aa', '#5566ee', '#222c66'],
+        planetSprites:   DEFAULT_PLANET_SPRITES,
         enemies: {
             count:          2,
             abilities:      [EnemyAbility.SPIKED, EnemyAbility.SHOOTER],
@@ -298,6 +358,7 @@ export const LEVELS = Object.freeze([
             borderShadow: '#aaaaaa',
         },
         planetPalette:   ['#888888', '#aaaaaa', '#666666', '#777777', '#999999', '#555555'],
+        planetSprites:   DEFAULT_PLANET_SPRITES,
         enemies: {
             boss:           true,
             count:          1,
