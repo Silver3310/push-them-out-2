@@ -131,6 +131,10 @@ export class SpriteManager {
     /**
      * Hot-swap a sprite by key without reloading the manifest.
      *
+     * Works with a shallow copy of the manifest entry so the manifest's
+     * `src` field is never mutated — this keeps `reloadFromManifest()`
+     * able to restore original paths correctly after per-level overrides.
+     *
      * @param {string} key       - Sprite key as declared in the manifest.
      * @param {string} newSrc    - Path to the new image. Missing files leave
      *                             the previous image untouched (warns once).
@@ -140,9 +144,12 @@ export class SpriteManager {
      *                             the swap is instant.
      */
     swapSprite(key, newSrc, fadeMs = 0) {
-        const entry = this._manifest?.sprites[key];
-        if (!entry) { console.warn(`swapSprite: unknown key "${key}"`); return; }
-        entry.src = newSrc;
+        const manifestEntry = this._manifest?.sprites[key];
+        if (!manifestEntry) { console.warn(`swapSprite: unknown key "${key}"`); return; }
+
+        // Copy so the manifest src is never mutated — reloadFromManifest()
+        // depends on the original paths remaining intact.
+        const entry = { ...manifestEntry, src: newSrc };
 
         if (fadeMs <= 0) {
             this._loadSprite(key, entry);
@@ -161,8 +168,21 @@ export class SpriteManager {
                 fadeDuration:  fadeMs,
             });
         };
-        img.onerror = () => console.warn(`Sprite missing: ${entry.src}`);
+        img.onerror = () => console.warn(`Sprite missing: ${newSrc}`);
         img.src     = newSrc;
+    }
+
+    /**
+     * Reload every sprite from its original manifest path. Fires async image
+     * loads; entities show their procedural fallback for the brief loading gap.
+     * Called by `LevelManager.reset()` so a full game replay starts with the
+     * correct base artwork regardless of how many levels were played.
+     */
+    reloadFromManifest() {
+        if (!this._manifest) return;
+        // _preloadAll reads the original manifest entries (not mutated because
+        // swapSprite now copies before modifying src).
+        this._preloadAll();
     }
 
     isLoaded() { return this._loaded; }

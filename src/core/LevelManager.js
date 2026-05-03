@@ -96,18 +96,30 @@ export class LevelManager {
     // -------------------------------------------------------------------------
 
     /**
-     * Reset to level 1 with no transition. Called from `Game._startNewGame`
-     * so each new run begins on the first level with the default visuals.
+     * Reset to level 1 with no transition. Called from `Game._startPlaying`
+     * so each new run begins on the first level with the correct base artwork.
+     *
+     * Strategy:
+     *   1. Clear the cache so stale per-level sprites from a prior run can't
+     *      bleed into the first frame of the new run.
+     *   2. Reload every sprite from its original manifest path (the full base
+     *      set: cake, boss, outro screens, etc.) — this fixes the bug where
+     *      sprites not in LEVEL_1_SPRITE_OVERRIDES were permanently missing
+     *      after the first reset.
+     *   3. Apply level-1 overrides on top so any L1-specific art is in place.
+     *
+     * All three steps fire async image loads; entities show their procedural
+     * fallback for the brief loading gap, which is indistinguishable from a
+     * cold boot.
      */
     reset() {
         this._index      = 0;
         this._transition = null;
-        // Purge stale per-level art so the first frame of a replay cannot show
-        // sprites from a previous run while level-1 assets reload asynchronously.
-        // Entities fall back to procedural rendering for the brief loading gap.
         this._sprites?.clearSpriteCache();
-        // Hard-restore L1 sprites — replays should look exactly like a fresh
-        // first run, not inherit whatever the previous run left in cache.
+        // Restore the full manifest set (cake, boss, ui sprites, etc.) so
+        // nothing is permanently missing after the cache wipe.
+        this._sprites?.reloadFromManifest();
+        // Level-1 overrides sit on top of the manifest reload and win any race.
         this._applySpriteOverrides(this.current, /* fadeMs */ 0);
     }
 

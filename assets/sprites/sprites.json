@@ -56,8 +56,26 @@
             "height": 720
         },
         "ui_outro": {
-            "_comment": "Full-screen outro splash shown after all levels are cleared. 1280x720 authored resolution.",
+            "_comment": "Legacy full-screen outro splash. Kept for backwards compatibility; prefer the tier-specific ui_outro_gold/silver/bronze keys.",
             "src": "assets/sprites/ui/outro.png",
+            "width": 1280,
+            "height": 720
+        },
+        "ui_outro_gold": {
+            "_comment": "Gold outro screen — shown when the player finishes the campaign with fewer than 20 deaths.",
+            "src": "assets/sprites/ui/outro_gold.png",
+            "width": 1280,
+            "height": 720
+        },
+        "ui_outro_silver": {
+            "_comment": "Silver outro screen — shown when the player finishes with fewer than 40 deaths.",
+            "src": "assets/sprites/ui/outro_silver.png",
+            "width": 1280,
+            "height": 720
+        },
+        "ui_outro_bronze": {
+            "_comment": "Bronze outro screen — shown when the player finishes with 40 or more deaths.",
+            "src": "assets/sprites/ui/outro_bronze.png",
             "width": 1280,
             "height": 720
         }
