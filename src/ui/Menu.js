@@ -387,6 +387,7 @@ export class Menu {
         ctx.shadowBlur = 0;
         ctx.font       = `28px 'Courier New'`;
         ctx.fillStyle  = 'rgba(230, 240, 255, 0.92)';
+        ctx.textAlign = 'left';
 
         const lines = [
             'PushThemOut 2 — 2026',
@@ -396,7 +397,7 @@ export class Menu {
             'Sound designer:    wsocha',
         ];
         let y = 230;
-        lines.forEach(line => { ctx.fillText(line, W / 2, y); y += 50; });
+        lines.forEach(line => { ctx.fillText(line, W / 3, y); y += 50; });
 
         this._drawHint(ctx, 'Click anywhere or press ESC to go back');
         ctx.restore();
