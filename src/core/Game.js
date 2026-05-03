@@ -27,6 +27,7 @@ import { CakeManager }          from '../logic/CakeManager.js';
 import { BombManager }          from '../logic/BombManager.js';
 import { WarningManager }       from '../logic/WarningManager.js';
 import { Menu }                 from '../ui/Menu.js';
+import { SplashScreen }         from '../ui/SplashScreen.js';
 import { IntroScreen }          from '../ui/IntroScreen.js';
 import { OutroScreen }          from '../ui/OutroScreen.js';
 import { NotificationManager }  from '../ui/NotificationManager.js';
@@ -98,6 +99,7 @@ class Game {
         this._gameTimer = GameConfig.GAME_TIMER_DURATION;
 
         this.menu           = null;
+        this._splash        = null;
         this._intro         = null;
         this._outro         = null;
         this._notifications = null;
@@ -118,16 +120,17 @@ class Game {
         this.levels         = new LevelManager(this.sprites);
         this.score          = new ScoreManager(this.levels);
         this.menu           = new Menu(this.canvas, this.input);
+        this._splash        = new SplashScreen(this.canvas);
         this._intro         = new IntroScreen(this.canvas, this.input, this.sprites);
         this._outro         = new OutroScreen(this.canvas, this.input, this.sprites);
         this._notifications = new NotificationManager(document.getElementById('ui-overlay'));
         this._setupEventListeners();
 
-        // Queue the menu soundtrack — AudioManager defers playback until the
-        // browser's first-gesture audio unlock, so this is safe pre-click.
-        this.audio.playMenuMusic();
-
-        this.state = GameState.MENU;
+        // Show the company splash first. Menu music is deferred until the
+        // player's first gesture on the splash so the audio context can
+        // unlock in lock-step with the SPLASH → MENU transition.
+        this._splash.activate();
+        this.state = GameState.SPLASH;
         requestAnimationFrame(ts => this._loop(ts));
     }
 
@@ -162,6 +165,13 @@ class Game {
     }
 
     _setupEventListeners() {
+        // Splash dismissed → play menu music (first gesture unlocks audio context)
+        eventBus.on(GameEvents.SPLASH_DISMISSED, () => {
+            this._splash.deactivate();
+            this.audio.playMenuMusic();
+            this.state = GameState.MENU;
+        });
+
         eventBus.on(GameEvents.MENU_START_GAME, () => this._startNewGame());
 
         // Intro dismissed → begin actual gameplay (builds level, starts music)
@@ -185,9 +195,9 @@ class Game {
                 // level config ever made one tag-as-enemy + boss, we still
                 // wouldn't want to count it as a kill / respawn it.
                 if (ball.hasTag('boss')) return;
-                ball.die();
-                this.score.recordEnemyKill();
-                setTimeout(() => { if (!ball.active) return; ball.respawn(); }, 3000);
+                // isInHole is already true (set by physics); _killEnemyWithWarning
+                // will detect this and skip re-hiding it.
+                this._killEnemyWithWarning(ball);
             } else if (ball.hasTag('star')) {
                 // Star is permanently removed; _maintainStarCount will spawn a replacement
                 ball.destroy();
@@ -422,6 +432,10 @@ class Game {
      */
     _rebuildEnemies(level, options = {}) {
         for (const e of this.enemies) e.destroy();
+        // Cancel any pending spawn telegraphs from the outgoing level so the
+        // new level starts with a clean visual slate. New telegraphs are
+        // queued below as each enemy's warning fires.
+        this._warningManager.reset();
         this.bullets        = [];
         this.enemies        = [];
         this._boss          = null;
@@ -508,6 +522,39 @@ class Game {
 
     addBullet(bullet) {
         this.bullets.push(bullet);
+    }
+
+    /**
+     * Common kill path for non-boss enemy deaths (hole, asteroid, black hole,
+     * singularity). Immediately hides the enemy (isInHole = true) so it
+     * disappears on the very next frame, records the kill, and then schedules
+     * a {@link SpawnWarning} telegraph at the enemy's home position. The
+     * warning fires after {@link GameConfig.SPAWN_WARNING_DURATION} seconds
+     * and calls respawn() — giving the player a fair 3-second visual cue
+     * before the enemy reappears, which is especially important for spiked
+     * enemies that can kill on contact.
+     *
+     * Handles both "fell into real hole" (isInHole already set by physics)
+     * and "killed by hazard" (isInHole not yet set) uniformly.
+     *
+     * @param {Enemy} enemy
+     */
+    _killEnemyWithWarning(enemy) {
+        if (!enemy.isInHole) {
+            enemy.isInHole = true;
+            enemy.vx = 0;
+            enemy.vy = 0;
+        }
+        enemy.die();
+        this.score.recordEnemyKill();
+        const kind = enemy.hasTag('spiked') ? 'spikedEnemy' : 'enemy';
+        this._warningManager.schedule({
+            x:      enemy.spawnX,
+            y:      enemy.spawnY,
+            radius: enemy.radius,
+            kind,
+            onFire: () => { if (!enemy.active) return; enemy.respawn(); },
+        });
     }
 
     /**
@@ -616,7 +663,9 @@ class Game {
         const dt = Math.min((timestamp - this._lastTime) / 1000, 0.1);
         this._lastTime = timestamp;
 
-        if (this.state === GameState.MENU) {
+        if (this.state === GameState.SPLASH) {
+            this._splash.update(dt);
+        } else if (this.state === GameState.MENU) {
             this.menu.update(dt);
         } else if (this.state === GameState.INTRO) {
             this._intro.update(dt);
@@ -831,9 +880,9 @@ class Game {
                 if (!_circlesOverlap(asteroid, enemy)) continue;
 
                 asteroid.destroy();
-                enemy.die();
-                this.score.recordEnemyKill();
-                setTimeout(() => { if (!enemy.active) return; enemy.respawn(); }, 3000);
+                // _killEnemyWithWarning sets isInHole immediately so the
+                // enemy vanishes on this very frame (no visual lag).
+                this._killEnemyWithWarning(enemy);
                 eventBus.emit(GameEvents.ASTEROID_HIT, { asteroid, target: enemy });
                 break;
             }
@@ -897,9 +946,7 @@ class Game {
                 if (enemy.hasTag('boss')) continue;
                 const result = bh.affect(enemy);
                 if (result === 'kill') {
-                    enemy.die();
-                    this.score.recordEnemyKill();
-                    setTimeout(() => { if (!enemy.active) return; enemy.respawn(); }, 3000);
+                    this._killEnemyWithWarning(enemy);
                     eventBus.emit(GameEvents.BLACK_HOLE_SWALLOWED, { blackHole: bh, target: enemy });
                 }
             }
@@ -958,9 +1005,7 @@ class Game {
             if (enemy.hasTag('boss')) continue;
             const result = sing.affect(enemy);
             if (result === 'kill') {
-                enemy.die();
-                this.score.recordEnemyKill();
-                setTimeout(() => { if (!enemy.active) return; enemy.respawn(); }, 3000);
+                this._killEnemyWithWarning(enemy);
             }
         }
 
@@ -1145,6 +1190,11 @@ class Game {
     _render() {
         const ctx = this.renderer.ctx;
         this.renderer.clear();
+
+        if (this.state === GameState.SPLASH) {
+            this._splash.render(ctx);
+            return;
+        }
 
         if (this.state === GameState.MENU) {
             this.menu.render(ctx);

@@ -328,7 +328,6 @@ export class Menu {
         const rules = [
             '• Use WASD (or arrow keys) to move your ball around the arena.',
             '• Left-click to shoot a small projectile that pushes other balls.',
-            '• Right-click to use your special burst ability.',
             '• Knock enemies into the corner holes to score stars.',
             '• If you fall in a hole yourself, you respawn after a short delay.',
             `• Clear all ${LEVELS.length} levels — each demands more stars than the last (starting at ${LEVELS[0].starsToWin}, ending at ${LEVELS[LEVELS.length - 1].starsToWin}).`,

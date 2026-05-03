@@ -8,19 +8,17 @@ export class PlayerController {
         this.player = player;
         this.input  = inputHandler;
         this.game   = gameRef;
-        this._prevLeft  = false;
-        this._prevRight = false;
+        this._prevLeft = false;
     }
 
     /**
      * Snapshot the current mouse-button state into the rising-edge
-     * trackers. Call this right after construction when a button is
+     * tracker. Call this right after construction when a button is
      * already held (e.g. the click that dismissed the main menu) to
      * avoid an immediate phantom shot on the first update().
      */
     syncInputState() {
-        this._prevLeft  = this.input.mouse.left;
-        this._prevRight = this.input.mouse.right;
+        this._prevLeft = this.input.mouse.left;
     }
 
     update(dt) {
@@ -39,10 +37,6 @@ export class PlayerController {
         // Left click: shoot toward cursor (rising-edge only)
         if (this.input.mouse.left && !this._prevLeft) this._shoot();
         this._prevLeft = this.input.mouse.left;
-
-        // Right click: special burst (rising-edge, respects cooldown)
-        if (this.input.mouse.right && !this._prevRight) this._special();
-        this._prevRight = this.input.mouse.right;
     }
 
     _shoot() {
@@ -65,17 +59,4 @@ export class PlayerController {
         eventBus.emit(GameEvents.BALL_SHOOT, { ball: p });
     }
 
-    _special() {
-        if (this.player.specialCooldown > 0) return;
-        this.player.specialCooldown = 3.0;
-        const p  = this.player;
-        const dx = this.input.mouse.x - p.x;
-        const dy = this.input.mouse.y - p.y;
-        const len = Math.hypot(dx, dy) || 1;
-        p.applyImpulse(
-            (dx / len) * GameConfig.PLAYER_SHOOT_POWER * 2.2,
-            (dy / len) * GameConfig.PLAYER_SHOOT_POWER * 2.2
-        );
-        eventBus.emit(GameEvents.BALL_SHOOT, { ball: p, special: true });
-    }
 }

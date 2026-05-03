@@ -1,17 +1,19 @@
 import { GameConfig } from '../core/GameConfig.js';
-import { eventBus }   from '../events/EventBus.js';
-import { GameEvents } from '../events/GameEvents.js';
 
 /**
  * Full-screen outro splash shown after all levels are cleared.
  *
  * Displays `ui_outro` (assets/sprites/ui/outro.png) at canvas size with a
- * semi-transparent stats panel anchored to the top of the screen. Any key or
- * click (after a 0.3 s grace period) emits OUTRO_DISMISSED so Game can
- * return to the main menu.
+ * semi-transparent stats panel anchored to the top of the screen.
+ *
+ * ### Dismissal
+ * The outro can **only** be dismissed by pressing ESC. This is handled
+ * entirely by the `keydown` listener in `Game._setupEventListeners` —
+ * OutroScreen itself does not add any input handlers. The intentional
+ * restriction prevents accidental skips from stray clicks or held keys.
  *
  * Call `show(snapshot)` to activate the screen with the session's score
- * snapshot, and `deactivate()` when leaving to clean up the keydown listener.
+ * snapshot, and `deactivate()` when leaving to restore cursor styling.
  */
 export class OutroScreen {
     constructor(canvas, input, sprites) {
@@ -19,50 +21,26 @@ export class OutroScreen {
         this.input   = input;
         this.sprites = sprites;
 
-        this._snapshot       = null;
-        this._time           = 0;
-        this._graceTimer     = 0;
-        this._prevMouseLeft  = false;
-        this._keyJustPressed = false;
-        this._onKeyDown      = () => { this._keyJustPressed = true; };
+        this._snapshot = null;
+        this._time     = 0;
     }
 
     /**
-     * Activate the outro with the final score snapshot. Must be called before
-     * the first `update()`.
+     * Activate the outro with the final score snapshot.
      * @param {{ starsCollected: number, enemiesKilled: number, playerDeaths: number, starsLost: number }} snapshot
      */
     show(snapshot) {
-        this._snapshot       = snapshot;
-        this._time           = 0;
-        this._graceTimer     = 0.3;
-        this._prevMouseLeft  = this.input.mouse.left;
-        this._keyJustPressed = false;
-        window.addEventListener('keydown', this._onKeyDown);
-        this.canvas.style.cursor = 'pointer';
+        this._snapshot = snapshot;
+        this._time     = 0;
+        this.canvas.style.cursor = 'default';
     }
 
     deactivate() {
-        window.removeEventListener('keydown', this._onKeyDown);
         this.canvas.style.cursor = 'default';
     }
 
     update(dt) {
-        this._time       += dt;
-        this._graceTimer -= dt;
-
-        const clicked = this.input.mouse.left && !this._prevMouseLeft;
-        this._prevMouseLeft = this.input.mouse.left;
-
-        if (this._graceTimer > 0) {
-            this._keyJustPressed = false;
-            return;
-        }
-
-        if (clicked || this._keyJustPressed) {
-            this._keyJustPressed = false;
-            eventBus.emit(GameEvents.OUTRO_DISMISSED);
-        }
+        this._time += dt;
     }
 
     render(ctx) {
@@ -81,8 +59,8 @@ export class OutroScreen {
 
     _drawStatsPanel(ctx, W) {
         if (!this._snapshot) return;
-        const snap    = this._snapshot;
-        const panelH  = 150;
+        const snap   = this._snapshot;
+        const panelH = 150;
 
         ctx.save();
 
@@ -116,10 +94,10 @@ export class OutroScreen {
             W / 2, 102,
         );
 
-        // Dismiss hint
+        // Dismiss hint — ESC only
         ctx.fillStyle = 'rgba(180, 220, 255, 0.65)';
         ctx.font      = `14px 'Courier New'`;
-        ctx.fillText('Click or press any key to return to menu', W / 2, 128);
+        ctx.fillText('Press ESC to return to menu', W / 2, 128);
 
         ctx.restore();
     }

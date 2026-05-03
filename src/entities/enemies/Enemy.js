@@ -160,6 +160,13 @@ export class Enemy extends Ball {
         eventBus.emit(GameEvents.ENEMY_SPAWN, { enemy: this });
     }
 
+    /**
+     * Override in subclasses to inject per-entity sprite-draw options.
+     * Returning `{ rotation: angleRadians }` makes the sprite rotate.
+     * @returns {object}
+     */
+    _spriteDrawOptions() { return {}; }
+
     render(ctx) {
         if (this.isInHole) return;
 
@@ -175,7 +182,7 @@ export class Enemy extends Ball {
 
         if (this._sprites?.has(this._spriteKey)) {
             const d = this.radius * 2;
-            this._sprites.draw(ctx, this._spriteKey, this.x, this.y, d, d);
+            this._sprites.draw(ctx, this._spriteKey, this.x, this.y, d, d, this._spriteDrawOptions());
         } else {
             _drawCanvasBall(ctx, this.x, this.y, this.radius, this.color);
         }

@@ -58,6 +58,9 @@ export class Boss extends Enemy {
         this.maxSpeed = GameConfig.BOSS_MAX_SPEED;
         this.addTag('boss');
 
+        // Continuous sprite rotation (radians, accumulated in update)
+        this._rotation = 0;
+
         // Ray attack timers + state
         this._rayTimer      = GameConfig.BOSS_RAY_INTERVAL;
         this._rayStateTimer = 0;
@@ -72,6 +75,19 @@ export class Boss extends Enemy {
             GameConfig.CANVAS_WIDTH,
             GameConfig.CANVAS_HEIGHT,
         ) * 1.2;
+    }
+
+    /** Accumulate sprite rotation every physics step. */
+    update(dt) {
+        super.update(dt);
+        // Rotate at ~45°/s — slow enough to read the sprite art, fast enough
+        // to telegraph movement and feel imposing.
+        this._rotation += dt * Math.PI * 0.25;
+    }
+
+    /** Passes the current rotation angle to SpriteManager so the sprite spins. */
+    _spriteDrawOptions() {
+        return { rotation: this._rotation };
     }
 
     /**
