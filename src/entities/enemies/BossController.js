@@ -10,9 +10,9 @@ import { GameConfig }   from '../../core/GameConfig.js';
  *   1. base AIController.update — picks seek target, applies movement
  *      impulse, and (since the boss has the SHOOTER ability) fires bullets
  *      via `Enemy.fireAt()`.
- *   2. `_maybeDash`             — if the player is within
- *      `BOSS_DASH_TRIGGER_DIST` and the dash cooldown has elapsed, the
- *      controller calls `boss.dash(targetX, targetY)`.
+ *   2. `_maybeDash`             — whenever the dash cooldown has elapsed the
+ *      boss bursts toward the player, regardless of distance. The only gate
+ *      is the cooldown timer (`BOSS_DASH_COOLDOWN`).
  *   3. `boss.updateRay`         — drives the ray attack state machine; the
  *      boss internally cycles idle → telegraph → firing → idle.
  */
@@ -34,13 +34,8 @@ export class BossController extends AIController {
         const target = this._seekTarget;
         if (!target || !target.active || target.isInHole) return;
 
-        const boss = this.enemy;
-        const dx = target.x - boss.x;
-        const dy = target.y - boss.y;
-        const trig = GameConfig.BOSS_DASH_TRIGGER_DIST;
-        if (dx * dx + dy * dy > trig * trig) return;
-
-        boss.dash(target.x, target.y);
+        // Distance check intentionally removed — the boss dashes at any range.
+        this.enemy.dash(target.x, target.y);
         this._dashCooldown = GameConfig.BOSS_DASH_COOLDOWN;
     }
 }

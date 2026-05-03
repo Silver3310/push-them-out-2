@@ -20,6 +20,7 @@ import { BossController } from '../entities/enemies/BossController.js';
 import { Hole }        from '../entities/objects/Hole.js';
 import { Planet }      from '../entities/objects/Planet.js';
 import { Star }            from '../entities/objects/Star.js';
+import { ArenaSingularity }     from '../entities/objects/ArenaSingularity.js';
 import { AsteroidManager }      from '../logic/AsteroidManager.js';
 import { BlackHoleManager }     from '../logic/BlackHoleManager.js';
 import { CakeManager }          from '../logic/CakeManager.js';
@@ -86,6 +87,13 @@ class Game {
         // before a black hole / bomb / boss / spiked enemy materialises in
         // their face. See WarningManager for the contract.
         this._warningManager   = new WarningManager();
+
+        // Level 5 permanent gravity well. Created/destroyed alongside the level.
+        this._arenaSingularity = null;
+
+        // Per-game countdown timer (seconds). Expires → GAME_OVER.
+        // Counts down only while state === PLAYING (pausing freezes it).
+        this._gameTimer = GameConfig.GAME_TIMER_DURATION;
 
         this.menu           = null;
         this._notifications = null;
@@ -189,19 +197,31 @@ class Game {
         eventBus.on(GameEvents.LEVEL_TRANSITION_MID, ({ level }) => {
             this._rebuildEnemies(level);
             this._applyHazardFlags(level);
+            // Hole accent rings update in sync with the background cross-fade
+            // so the correct highlight colour is always showing.
+            this._updateHoleStyles(level);
+            // Note: new-hazard notifications (including the singularity) are
+            // announced by _announceNewHazards() on LEVEL_COMPLETE — no need
+            // to repeat them here.
         });
 
-        // ESC: in menu sub-screens go back; otherwise toggle pause
+        // ESC: in menu sub-screens go back; otherwise toggle pause / restart
         window.addEventListener('keydown', e => {
-            if (e.code !== 'Escape') return;
-            if (this.state === GameState.MENU) {
-                this.menu.handleEscape();
-            } else if (this.state === GameState.PLAYING) {
-                this.state = GameState.PAUSED;
-                eventBus.emit(GameEvents.GAME_PAUSE);
-            } else if (this.state === GameState.PAUSED) {
-                this.state = GameState.PLAYING;
-                eventBus.emit(GameEvents.GAME_RESUME);
+            if (e.code === 'Escape') {
+                if (this.state === GameState.MENU) {
+                    this.menu.handleEscape();
+                } else if (this.state === GameState.PLAYING) {
+                    this.state = GameState.PAUSED;
+                    eventBus.emit(GameEvents.GAME_PAUSE);
+                } else if (this.state === GameState.PAUSED) {
+                    this.state = GameState.PLAYING;
+                    eventBus.emit(GameEvents.GAME_RESUME);
+                } else if (this.state === GameState.GAME_OVER) {
+                    // ESC from game over restarts the game immediately.
+                    this._startNewGame();
+                }
+            } else if (e.code === 'Enter' && this.state === GameState.GAME_OVER) {
+                this._startNewGame();
             }
         });
     }
@@ -209,6 +229,9 @@ class Game {
     _buildLevel() {
         const W = GameConfig.CANVAS_WIDTH;
         const H = GameConfig.CANVAS_HEIGHT;
+
+        // Fresh 10-minute countdown for every new game run.
+        this._gameTimer = GameConfig.GAME_TIMER_DURATION;
 
         // Six-pocket pool table layout
         this.holes = [
@@ -219,6 +242,8 @@ class Game {
             new Hole(W / 2,  H - 35),
             new Hole(W - 55, H - 55),
         ];
+        // Apply accent rings immediately so level 1 holes look correct from frame 1.
+        this._updateHoleStyles(this.levels.current);
 
         // Planet obstacles as bumpers. Colours come from the active level's
         // palette and are recoloured each frame during level transitions
@@ -303,6 +328,47 @@ class Game {
         this._blackHoleManager?.setEnabled(!!h.blackHoles);
         this._cakeManager?.setEnabled(!!h.cakes);
         this._bombManager?.setEnabled(!!h.bombs);
+        this._applyArenaSingularityFlag(!!h.levelSingularity);
+    }
+
+    /**
+     * Set or clear the accent ring on every pool-pocket hole based on the
+     * active level. Levels 1, 5, and 6 use dark backgrounds where black holes
+     * are nearly invisible without a coloured highlight ring.
+     *
+     * Called from `_buildLevel` (initial game start) and from the
+     * `LEVEL_TRANSITION_MID` listener (level changes) so the ring colour
+     * always matches the current level — even mid-run.
+     */
+    _updateHoleStyles(level) {
+        // Maps level id → accent colour chosen to contrast against that
+        // level's background without clashing with the border palette.
+        const ACCENT = {
+            1: '#cc55ff', // bright violet on the dark-purple L1 background
+            5: '#6699ff', // bright blue  on the deep-blue   L5 background
+            6: '#dddddd', // light silver on the black/grey   L6 background
+        };
+        const accent = ACCENT[level?.id] ?? null;
+        for (const hole of this.holes) {
+            hole.accentColor = accent;
+        }
+    }
+
+    /**
+     * Create or destroy the {@link ArenaSingularity} to match the `enabled`
+     * flag coming from the active level's `hazards.levelSingularity` entry.
+     * A new instance is only created when none exists — re-entering level 5
+     * after a restart goes through `_buildLevel` which already calls
+     * `_applyHazardFlags`, so double-creation is not possible in practice.
+     */
+    _applyArenaSingularityFlag(enabled) {
+        const W = GameConfig.CANVAS_WIDTH;
+        const H = GameConfig.CANVAS_HEIGHT;
+        if (enabled && !this._arenaSingularity) {
+            this._arenaSingularity = new ArenaSingularity(W / 2, H / 2);
+        } else if (!enabled && this._arenaSingularity) {
+            this._arenaSingularity = null;
+        }
     }
 
     /**
@@ -536,6 +602,16 @@ class Game {
     }
 
     _update(dt) {
+        // Countdown the per-game timer. Only runs while PLAYING; pausing
+        // freezes it because _update is not called in the PAUSED state.
+        this._gameTimer -= dt;
+        if (this._gameTimer <= 0) {
+            this._gameTimer = 0;
+            this.state = GameState.GAME_OVER;
+            eventBus.emit(GameEvents.GAME_OVER);
+            return; // Skip the rest of the update — game is over.
+        }
+
         // Advance the level cross-fade timer and apply the interpolated
         // planet palette to the live obstacle entities. This runs every
         // physics step but is a cheap colour assignment when not transitioning.
@@ -573,6 +649,7 @@ class Game {
         // takes any other hazard contact this frame; bombs run after pulls
         // so a "pulled then blasted" combination resolves naturally.
         this._updateBlackHoles(dt);
+        this._updateArenaSingularity(dt);
         this._updateAsteroids(dt);
         this._updateCakes(dt);
         this._updateBombs(dt);
@@ -813,6 +890,61 @@ class Game {
     }
 
     /**
+     * Tick the {@link ArenaSingularity} (Level 5 permanent gravity well) and
+     * resolve its interactions with every movable entity.
+     *
+     * Impact rules mirror those of the transient black holes:
+     *   - Player   → `_killPlayer` (2s respawn + invulnerability grace)
+     *   - Enemy    → `die()` + 3s respawn (boss immune — tagged check below)
+     *   - Star     → permanently removed, counted as lost
+     *   - Asteroid → silently destroyed (absorbed by the void)
+     *
+     * The boss is explicitly excluded by the `hasTag('boss')` guard — the
+     * same immunity it enjoys against all other environmental kill sources.
+     */
+    _updateArenaSingularity(dt) {
+        const sing = this._arenaSingularity;
+        if (!sing || !sing.active) return;
+
+        sing.update(dt);
+
+        for (const player of this.players) {
+            if (!player.active || player.isInHole) continue;
+            const result = sing.affect(player);
+            if (result === 'kill' && !player.isInvulnerable) {
+                this._killPlayer(player);
+            }
+        }
+
+        for (const enemy of this.enemies) {
+            if (!enemy.active || enemy.isInHole) continue;
+            // Boss is unkillable by any environmental hazard.
+            if (enemy.hasTag('boss')) continue;
+            const result = sing.affect(enemy);
+            if (result === 'kill') {
+                enemy.die();
+                this.score.recordEnemyKill();
+                setTimeout(() => { if (!enemy.active) return; enemy.respawn(); }, 3000);
+            }
+        }
+
+        for (const star of this.stars) {
+            if (!star.active || star.isInHole) continue;
+            const result = sing.affect(star);
+            if (result === 'kill') {
+                star.destroy();
+                this.score.recordStarLost();
+            }
+        }
+
+        for (const asteroid of this._asteroidManager?.asteroids ?? []) {
+            if (!asteroid.active) continue;
+            const result = sing.affect(asteroid);
+            if (result === 'kill') asteroid.destroy();
+        }
+    }
+
+    /**
      * Drive {@link CakeManager}: detect player overlap with each cake and
      * apply the "fat & slow" status. Cakes have no effect on enemies — by
      * design only the player can be tempted into eating one.
@@ -991,6 +1123,10 @@ class Game {
             h: GameConfig.CANVAS_HEIGHT - 40,
         }, spec);
 
+        // Arena singularity renders BEFORE holes/planets so those landmarks
+        // appear on top of (and are therefore readable against) the gravity tint.
+        this._arenaSingularity?.render(ctx);
+
         this.holes.forEach(h => h.render(ctx));
         this.planets.forEach(p => p.render(ctx));
 
@@ -1025,6 +1161,7 @@ class Game {
             this.score.getSnapshot(),
             { name: lvl.name, starsToWin: lvl.starsToWin },
             this.players,
+            this._gameTimer,
         );
         this.renderer.drawControls();
 
@@ -1032,8 +1169,9 @@ class Game {
         // contributes one entry when its shower is imminent.
         this.renderer.drawHazardWarnings(this._collectHazardWarnings());
 
-        if (this.state === GameState.PAUSED)  this._renderPauseScreen(ctx);
-        if (this.state === GameState.VICTORY) this._renderVictoryScreen(ctx);
+        if (this.state === GameState.PAUSED)    this._renderPauseScreen(ctx);
+        if (this.state === GameState.GAME_OVER) this._renderGameOverScreen(ctx);
+        if (this.state === GameState.VICTORY)   this._renderVictoryScreen(ctx);
     }
 
     /**
@@ -1068,6 +1206,46 @@ class Game {
         ctx.font      = `18px 'Courier New'`;
         ctx.fillStyle = '#aaaaaa';
         ctx.fillText('Press ESC to resume', W / 2, H / 2 + 30);
+        ctx.restore();
+    }
+
+    _renderGameOverScreen(ctx) {
+        const W = GameConfig.CANVAS_WIDTH;
+        const H = GameConfig.CANVAS_HEIGHT;
+        ctx.save();
+
+        // Darkened arena
+        ctx.fillStyle = 'rgba(20,0,0,0.80)';
+        ctx.fillRect(0, 0, W, H);
+
+        // "TIME'S UP!" heading — red glow
+        ctx.font         = `bold 72px 'Courier New'`;
+        ctx.textAlign    = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle    = '#ff3333';
+        ctx.shadowColor  = '#ff0000';
+        ctx.shadowBlur   = 36;
+        ctx.fillText("TIME'S UP!", W / 2, H / 2 - 60);
+
+        // Final stats
+        ctx.shadowBlur = 0;
+        ctx.fillStyle  = '#ffffff';
+        ctx.font       = `24px 'Courier New'`;
+        const snap = this.score.getSnapshot();
+        ctx.fillText(
+            `★ ${snap.starsCollected} collected  ·  ${snap.enemiesKilled} enemies  ·  ${snap.playerDeaths} deaths`,
+            W / 2, H / 2 + 10,
+        );
+
+        ctx.fillStyle = '#aaaaaa';
+        ctx.font      = `16px 'Courier New'`;
+        ctx.fillText(`${snap.starsLost} star${snap.starsLost !== 1 ? 's' : ''} lost to holes`, W / 2, H / 2 + 46);
+
+        // Restart prompt
+        ctx.fillStyle = '#888888';
+        ctx.font      = `14px 'Courier New'`;
+        ctx.fillText('Press ESC or ENTER to play again', W / 2, H / 2 + 90);
+
         ctx.restore();
     }
 

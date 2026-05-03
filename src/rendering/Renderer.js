@@ -80,13 +80,16 @@ export class Renderer {
     /**
      * Render the in-game HUD.
      *
-     * @param {object} scoreSnapshot - From `ScoreManager.getSnapshot()`. Uses
-     *     `starsCollectedThisLevel` (per-level progress) and `starsLost`.
-     * @param {object} levelInfo     - `{ name: string, starsToWin: number }`
+     * @param {object}   scoreSnapshot  - From `ScoreManager.getSnapshot()`.
+     *     Uses `starsCollectedThisLevel` (per-level progress) and `starsLost`.
+     * @param {object}   levelInfo      - `{ name: string, starsToWin: number }`
      *     pulled from the active `LevelManager.current`.
      * @param {Player[]} players
+     * @param {number|null} timeRemaining - Seconds left on the game timer.
+     *     `null` hides the timer (e.g. while on the menu). Values below 60
+     *     are rendered in urgent red with a pulsing glow.
      */
-    drawHUD(scoreSnapshot, levelInfo, players) {
+    drawHUD(scoreSnapshot, levelInfo, players, timeRemaining = null) {
         const ctx = this.ctx;
         const W   = GameConfig.CANVAS_WIDTH;
         ctx.save();
@@ -97,6 +100,24 @@ export class Renderer {
         ctx.fillStyle = 'rgba(255, 255, 255, 0.45)';
         ctx.textAlign = 'center';
         ctx.fillText(levelInfo.name, W / 2, 20);
+
+        // Game timer (top-centre, below level name)
+        if (timeRemaining !== null) {
+            const mins     = Math.floor(timeRemaining / 60);
+            const secs     = Math.floor(timeRemaining % 60);
+            const label    = `${mins}:${String(secs).padStart(2, '0')}`;
+            const isUrgent = timeRemaining < 60;
+            ctx.font      = `bold ${isUrgent ? 15 : 12}px 'Courier New'`;
+            ctx.fillStyle = isUrgent ? '#ff4422' : 'rgba(255,255,255,0.38)';
+            if (isUrgent) {
+                // Pulse speed doubles in the final 15 seconds to add urgency.
+                const hz = timeRemaining < 15 ? 0.014 : 0.007;
+                ctx.shadowColor = '#ff2200';
+                ctx.shadowBlur  = 10 * (0.5 + 0.5 * Math.sin(Date.now() * hz));
+            }
+            ctx.fillText(`⏱ ${label}`, W / 2, 38);
+            ctx.shadowBlur = 0;
+        }
 
         // Star progress (top-right): gold ★ collected / goal
         const collected = scoreSnapshot.starsCollectedThisLevel;

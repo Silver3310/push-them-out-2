@@ -62,9 +62,12 @@ export class Boss extends Enemy {
         this._rayTimer      = GameConfig.BOSS_RAY_INTERVAL;
         this._rayStateTimer = 0;
         this._rayState      = RayState.IDLE;
-        this._rayAngle      = 0;
-        // A ray longer than the canvas diagonal guarantees we always reach
-        // the far edge regardless of where the boss happens to be.
+        // An array of angles rather than a single scalar so the triple-ray
+        // variant can store all three beams in the same state machine cycle.
+        // Populated from RayState.IDLE → TELEGRAPH and held fixed for the
+        // rest of the attack so dodging remains possible.
+        this._rayAngles     = [0];
+        // Longer than the canvas diagonal → always reaches the far edge.
         this._rayLength     = Math.hypot(
             GameConfig.CANVAS_WIDTH,
             GameConfig.CANVAS_HEIGHT,
@@ -87,9 +90,10 @@ export class Boss extends Enemy {
 
     /**
      * Drive the ray attack state machine. Called once per fixed timestep
-     * by `BossController`. `target` is the player; the ray is aimed at
-     * its position the moment the telegraph begins and does NOT track
-     * afterwards (so dodging works).
+     * by `BossController`. `target` is the player; the ray angle(s) are
+     * locked the moment the state flips IDLE → TELEGRAPH so the player can
+     * commit to dodging. With probability `BOSS_TRIPLE_RAY_CHANCE` the boss
+     * fires three beams spread `BOSS_RAY_SPREAD` radians apart instead of one.
      */
     updateRay(dt, target) {
         if (this.isInHole || !this.active) return;
@@ -97,7 +101,13 @@ export class Boss extends Enemy {
         if (this._rayState === RayState.IDLE) {
             this._rayTimer -= dt;
             if (this._rayTimer <= 0 && target) {
-                this._rayAngle = Math.atan2(target.y - this.y, target.x - this.x);
+                const base = Math.atan2(target.y - this.y, target.x - this.x);
+                if (Math.random() < GameConfig.BOSS_TRIPLE_RAY_CHANCE) {
+                    const s = GameConfig.BOSS_RAY_SPREAD;
+                    this._rayAngles = [base - s, base, base + s];
+                } else {
+                    this._rayAngles = [base];
+                }
                 this._rayState = RayState.TELEGRAPH;
                 this._rayStateTimer = GameConfig.BOSS_RAY_TELEGRAPH;
                 // Emit the moment the warning line lights up — AudioManager
@@ -126,69 +136,83 @@ export class Boss extends Enemy {
     }
 
     /**
-     * Test whether `target` (any entity with x/y/radius) intersects the
-     * lethal ray segment. Cheap point-to-segment distance vs. half the
-     * configured ray thickness plus the target radius.
+     * Test whether `target` intersects ANY of the currently active ray
+     * segments. Returns true on the first hit so callers can short-circuit.
      */
     rayHits(target) {
         if (!this.isRayLethal || !target?.active || target.isInHole) return false;
-        const ax = this.x;
-        const ay = this.y;
-        const bx = ax + Math.cos(this._rayAngle) * this._rayLength;
-        const by = ay + Math.sin(this._rayAngle) * this._rayLength;
+        const ax    = this.x;
+        const ay    = this.y;
         const reach = GameConfig.BOSS_RAY_THICKNESS / 2 + (target.radius ?? 0);
-        return _distanceSqPointToSegment(target.x, target.y, ax, ay, bx, by) <= reach * reach;
+        const reachSq = reach * reach;
+        for (const angle of this._rayAngles) {
+            const bx = ax + Math.cos(angle) * this._rayLength;
+            const by = ay + Math.sin(angle) * this._rayLength;
+            if (_distanceSqPointToSegment(target.x, target.y, ax, ay, bx, by) <= reachSq) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
-     * Render the telegraph / firing overlay. Drawn from `Game._render` AFTER
-     * other entities so the deadly flash sits visually above the playfield.
-     * No-op while the ray is idle.
+     * Render the telegraph / firing overlay for all active ray angles.
+     * Drawn from `Game._render` AFTER other entities so the deadly flash
+     * sits visually above the playfield. No-op while the ray is idle.
+     *
+     * Both the single-ray and triple-ray variants share the same per-beam
+     * drawing code — only the number of iterations differs.
      */
     renderRayOverlay(ctx) {
         if (this._rayState === RayState.IDLE) return;
 
-        const ax = this.x;
-        const ay = this.y;
-        const bx = ax + Math.cos(this._rayAngle) * this._rayLength;
-        const by = ay + Math.sin(this._rayAngle) * this._rayLength;
-
         ctx.save();
+        ctx.lineCap = 'round';
+
         if (this._rayState === RayState.TELEGRAPH) {
-            // Flicker so it reads as a charging weapon rather than a static line
             const elapsed = 1 - this._rayStateTimer / GameConfig.BOSS_RAY_TELEGRAPH;
+            // Flicker so it reads as a charging weapon rather than a static line
             ctx.globalAlpha = 0.45 + 0.45 * Math.abs(Math.sin(elapsed * Math.PI * 8));
             ctx.strokeStyle = '#ff66dd';
             ctx.lineWidth   = 2;
             ctx.shadowColor = '#ff66dd';
             ctx.shadowBlur  = 12;
-            ctx.beginPath();
-            ctx.moveTo(ax, ay);
-            ctx.lineTo(bx, by);
-            ctx.stroke();
+            for (const angle of this._rayAngles) {
+                ctx.beginPath();
+                ctx.moveTo(this.x, this.y);
+                ctx.lineTo(
+                    this.x + Math.cos(angle) * this._rayLength,
+                    this.y + Math.sin(angle) * this._rayLength,
+                );
+                ctx.stroke();
+            }
         } else { // FIRING
-            // Outer glow
             const t = this._rayStateTimer / GameConfig.BOSS_RAY_DURATION;
-            ctx.globalAlpha = 0.7 + 0.3 * t;
-            ctx.strokeStyle = '#ffffff';
-            ctx.lineWidth   = GameConfig.BOSS_RAY_THICKNESS;
-            ctx.shadowColor = '#ff66dd';
-            ctx.shadowBlur  = 36;
-            ctx.lineCap     = 'round';
-            ctx.beginPath();
-            ctx.moveTo(ax, ay);
-            ctx.lineTo(bx, by);
-            ctx.stroke();
-            // Bright inner core
-            ctx.globalAlpha = 1;
-            ctx.strokeStyle = '#ffd0ff';
-            ctx.lineWidth   = GameConfig.BOSS_RAY_THICKNESS * 0.4;
-            ctx.shadowBlur  = 12;
-            ctx.beginPath();
-            ctx.moveTo(ax, ay);
-            ctx.lineTo(bx, by);
-            ctx.stroke();
+            for (const angle of this._rayAngles) {
+                const bx = this.x + Math.cos(angle) * this._rayLength;
+                const by = this.y + Math.sin(angle) * this._rayLength;
+                // Outer glow pass
+                ctx.globalAlpha = 0.7 + 0.3 * t;
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth   = GameConfig.BOSS_RAY_THICKNESS;
+                ctx.shadowColor = '#ff66dd';
+                ctx.shadowBlur  = 36;
+                ctx.beginPath();
+                ctx.moveTo(this.x, this.y);
+                ctx.lineTo(bx, by);
+                ctx.stroke();
+                // Bright inner core pass
+                ctx.globalAlpha = 1;
+                ctx.strokeStyle = '#ffd0ff';
+                ctx.lineWidth   = GameConfig.BOSS_RAY_THICKNESS * 0.4;
+                ctx.shadowBlur  = 12;
+                ctx.beginPath();
+                ctx.moveTo(this.x, this.y);
+                ctx.lineTo(bx, by);
+                ctx.stroke();
+            }
         }
+
         ctx.restore();
     }
 }

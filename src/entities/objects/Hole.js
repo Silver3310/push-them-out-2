@@ -9,6 +9,10 @@ export class Hole extends Entity {
         this.radius        = 20;
         this.pullRadius    = GameConfig.HOLE_PULL_RADIUS;
         this.captureRadius = GameConfig.HOLE_CAPTURE_RADIUS;
+        // Set by Game._updateHoleStyles() on dark levels (1, 5, 6) where the
+        // black hole opening is almost invisible against the background.
+        // null → default dim rendering. Any CSS colour string → accent ring.
+        this.accentColor   = null;
         this.addTag('hole');
     }
 
@@ -58,6 +62,27 @@ export class Hole extends Entity {
         ctx.strokeStyle = '#440055';
         ctx.lineWidth   = 2;
         ctx.stroke();
+
+        // Accent ring — drawn on dark levels where the black opening blends
+        // into the background. Pulses so it catches the player's eye without
+        // being distracting on brighter levels (it's absent by default).
+        if (this.accentColor) {
+            const pulse = 0.55 + 0.45 * Math.sin(Date.now() * 0.0038);
+            ctx.globalAlpha  = pulse;
+            ctx.strokeStyle  = this.accentColor;
+            ctx.lineWidth    = 2.5;
+            ctx.shadowColor  = this.accentColor;
+            ctx.shadowBlur   = 14;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius + 7, 0, Math.PI * 2);
+            ctx.stroke();
+            // Second, slightly larger ring at half opacity for a halo effect
+            ctx.globalAlpha *= 0.45;
+            ctx.lineWidth    = 1.5;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius + 14, 0, Math.PI * 2);
+            ctx.stroke();
+        }
 
         ctx.restore();
     }
