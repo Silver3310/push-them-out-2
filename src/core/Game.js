@@ -299,7 +299,7 @@ class Game {
         );
 
         // Human player (centre)
-        const player = new Player(W / 2, H / 2, PLAYER_COLORS[1], 'Sweet Bulldog');
+        const player = new Player(W / 2, H / 2, PLAYER_COLORS[1], 'Player');
         this.players = [player];
         this._playerController = new PlayerController(player, this.input, this);
 
