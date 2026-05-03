@@ -167,6 +167,17 @@ export class SpriteManager {
 
     isLoaded() { return this._loaded; }
 
+    /**
+     * Remove all entries from the runtime image cache. Entities fall back to
+     * their procedural rendering path until sprites reload via `swapSprite` /
+     * `_applySpriteOverrides`. Call this before a hard game reset so stale
+     * per-level art from a previous run cannot bleed into the first frame of
+     * the new one while the level-1 images are reloading asynchronously.
+     */
+    clearSpriteCache() {
+        this._cache.clear();
+    }
+
     // -------------------------------------------------------------------------
     // Private drawing helper (shared between current and previous-image paths)
     // -------------------------------------------------------------------------

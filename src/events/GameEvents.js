@@ -61,10 +61,12 @@ export const GameEvents = Object.freeze({
     BOMB_PRIMED:   'bomb:primed',   // a bomb just had its fuse lit
     BOMB_EXPLODED: 'bomb:exploded', // a bomb just detonated
 
-    // Intro / Outro screens
+    // Splash / Intro / Outro screens
+    // Fired when the player dismisses the pre-menu splash (any key/click after grace period).
+    SPLASH_DISMISSED: 'splash:dismissed',
     // Fired when the player dismisses the intro splash (any key/click after grace period).
     INTRO_DISMISSED: 'intro:dismissed',
-    // Fired when the player dismisses the outro splash (any key/click after grace period).
+    // Fired when the player dismisses the outro (ESC key only).
     OUTRO_DISMISSED: 'outro:dismissed',
 
     // Menu (emitted by the Menu UI, consumed by Game / AudioManager)

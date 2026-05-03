@@ -11,7 +11,6 @@ export class Player extends Ball {
         this.deaths  = 0;
         this.spawnX  = x;
         this.spawnY  = y;
-        this.specialCooldown = 0;
         // Brief grace window after respawn — prevents instant re-kill from
         // spiked enemies sitting on the spawn point or lingering boss rays.
         this._invulnTimer = 0;
@@ -79,7 +78,6 @@ export class Player extends Ball {
 
     update(dt) {
         super.update(dt);
-        if (this.specialCooldown > 0) this.specialCooldown -= dt;
         if (this._invulnTimer > 0)    this._invulnTimer    -= dt;
         if (this._fatTimer > 0) {
             this._fatTimer -= dt;
@@ -143,16 +141,6 @@ export class Player extends Ball {
         ctx.textAlign    = 'center';
         ctx.textBaseline = 'bottom';
         ctx.fillText(this.name.toUpperCase(), this.x, this.y - this.radius - 2);
-
-        // Special cooldown arc indicator
-        if (this.specialCooldown > 0) {
-            const progress = this.specialCooldown / 3.0;
-            ctx.beginPath();
-            ctx.arc(this.x, this.y, this.radius + 4, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * progress);
-            ctx.strokeStyle = '#ffcc00';
-            ctx.lineWidth   = 2;
-            ctx.stroke();
-        }
 
         ctx.restore();
     }

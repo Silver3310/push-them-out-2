@@ -101,24 +101,6 @@ export class Renderer {
         ctx.textAlign = 'center';
         ctx.fillText(levelInfo.name, W / 2, 20);
 
-        // Game timer (top-centre, below level name)
-        if (timeRemaining !== null) {
-            const mins     = Math.floor(timeRemaining / 60);
-            const secs     = Math.floor(timeRemaining % 60);
-            const label    = `${mins}:${String(secs).padStart(2, '0')}`;
-            const isUrgent = timeRemaining < 60;
-            ctx.font      = `bold ${isUrgent ? 15 : 12}px 'Courier New'`;
-            ctx.fillStyle = isUrgent ? '#ff4422' : 'rgba(255,255,255,0.38)';
-            if (isUrgent) {
-                // Pulse speed doubles in the final 15 seconds to add urgency.
-                const hz = timeRemaining < 15 ? 0.014 : 0.007;
-                ctx.shadowColor = '#ff2200';
-                ctx.shadowBlur  = 10 * (0.5 + 0.5 * Math.sin(Date.now() * hz));
-            }
-            ctx.fillText(`⏱ ${label}`, W / 2, 38);
-            ctx.shadowBlur = 0;
-        }
-
         // Star progress (top-right): gold ★ collected / goal
         const collected = scoreSnapshot.starsCollectedThisLevel;
         const goal      = levelInfo.starsToWin;
@@ -158,6 +140,28 @@ export class Renderer {
             px += 180;
         });
 
+        // Game timer — bottom-right, format "M:SS left"
+        // Turns urgent red with a pulsing glow when less than 60 s remain,
+        // and pulses faster in the final 15 s.
+        if (timeRemaining !== null) {
+            const H        = GameConfig.CANVAS_HEIGHT;
+            const mins     = Math.floor(timeRemaining / 60);
+            const secs     = Math.floor(timeRemaining % 60);
+            const label    = `${mins}:${String(secs).padStart(2, '0')} left`;
+            const isUrgent = timeRemaining < 60;
+
+            ctx.font      = `bold ${isUrgent ? 15 : 13}px 'Courier New'`;
+            ctx.textAlign = 'right';
+            ctx.fillStyle = isUrgent ? '#ff4422' : 'rgba(255,255,255,0.55)';
+            if (isUrgent) {
+                const hz = timeRemaining < 15 ? 0.014 : 0.007;
+                ctx.shadowColor = '#ff2200';
+                ctx.shadowBlur  = 10 * (0.5 + 0.5 * Math.sin(Date.now() * hz));
+            }
+            ctx.fillText(label, W - 20, H - 20);
+            ctx.shadowBlur = 0;
+        }
+
         ctx.restore();
     }
 
@@ -170,7 +174,6 @@ export class Renderer {
         const lines = [
             'WASD to move',
             'Left click to shoot',
-            'Right click – special ability',
         ];
         lines.forEach((line, i) => {
             ctx.fillText(line, 20, GameConfig.CANVAS_HEIGHT - 20 - (lines.length - 1 - i) * 18);

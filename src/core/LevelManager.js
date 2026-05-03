@@ -102,6 +102,10 @@ export class LevelManager {
     reset() {
         this._index      = 0;
         this._transition = null;
+        // Purge stale per-level art so the first frame of a replay cannot show
+        // sprites from a previous run while level-1 assets reload asynchronously.
+        // Entities fall back to procedural rendering for the brief loading gap.
+        this._sprites?.clearSpriteCache();
         // Hard-restore L1 sprites — replays should look exactly like a fresh
         // first run, not inherit whatever the previous run left in cache.
         this._applySpriteOverrides(this.current, /* fadeMs */ 0);
