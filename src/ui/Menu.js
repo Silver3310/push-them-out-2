@@ -331,8 +331,7 @@ export class Menu {
             '• Left-click to shoot a small projectile that pushes other balls.',
             '• Knock enemies into the corner holes to score stars.',
             '• If you fall in a hole yourself, you respawn after a short delay.',
-            `• Clear all ${LEVELS.length} levels — each demands more stars than the last`,
-            `  (starting at ${LEVELS[0].starsToWin} stars, ending at ${LEVELS[LEVELS.length - 1].starsToWin} stars).`,
+            `• Clear all ${LEVELS.length} levels by collecting the required amount of stars to win.`,
             '• You have 10 minutes total. Run out of time → game over.',
             '• Press ESC during the game to pause.',
         ];
