@@ -317,11 +317,12 @@ export class Menu {
         ctx.shadowColor  = '#7ce6ff';
         ctx.shadowBlur   = 22;
         ctx.fillStyle    = '#ffffff';
-        ctx.font         = `bold 64px 'Courier New'`;
-        ctx.fillText('Rules', W / 2, 110);
+        ctx.font         = `bold 56px 'Courier New'`;
+        ctx.fillText('Rules', W / 2, 96);
 
+        // --- Gameplay rules ---
         ctx.shadowBlur = 0;
-        ctx.font       = `22px 'Courier New'`;
+        ctx.font       = `bold 18px 'Courier New'`;
         ctx.fillStyle  = 'rgba(230, 240, 255, 0.92)';
         ctx.textAlign  = 'left';
 
@@ -330,12 +331,44 @@ export class Menu {
             '• Left-click to shoot a small projectile that pushes other balls.',
             '• Knock enemies into the corner holes to score stars.',
             '• If you fall in a hole yourself, you respawn after a short delay.',
-            `• Clear all ${LEVELS.length} levels — each demands more stars than the last (starting at ${LEVELS[0].starsToWin}, ending at ${LEVELS[LEVELS.length - 1].starsToWin}).`,
+            `• Clear all ${LEVELS.length} levels — each demands more stars than the last`,
+            `  (starting at ${LEVELS[0].starsToWin} stars, ending at ${LEVELS[LEVELS.length - 1].starsToWin} stars).`,
+            '• You have 10 minutes total. Run out of time → game over.',
             '• Press ESC during the game to pause.',
         ];
 
-        let y = 220;
-        rules.forEach(line => { ctx.fillText(line, 120, y); y += 42; });
+        let y = 186;
+        for (const line of rules) {
+            ctx.fillText(line, 110, y);
+            y += 36;
+        }
+
+        // --- Medal system ---
+        y += 8;
+        ctx.textAlign = 'center';
+        ctx.font      = `bold 22px 'Courier New'`;
+        ctx.fillStyle = '#ffd700';
+        ctx.shadowColor = '#ffaa00';
+        ctx.shadowBlur  = 10;
+        ctx.fillText('MEDALS — how well did you play?', W / 2, y);
+        ctx.shadowBlur = 0;
+
+        y += 34;
+        const medalRows = [
+            { label: '★  GOLD   medal', note: `finish with fewer than 20 deaths`,  color: '#ffd700' },
+            { label: '★  SILVER medal', note: `finish with fewer than 40 deaths`,  color: '#c8d8ee' },
+            { label: '★  BRONZE medal', note: `finish with 40 or more deaths`,      color: '#cd7f32' },
+        ];
+        ctx.textAlign = 'left';
+        for (const row of medalRows) {
+            ctx.font      = `bold 17px 'Courier New'`;
+            ctx.fillStyle = row.color;
+            ctx.fillText(row.label, 110, y);
+            ctx.fillStyle = 'rgba(200, 215, 240, 0.80)';
+            ctx.font      = `bold 15px 'Courier New'`;
+            ctx.fillText(`— ${row.note}`, 370, y + 1);
+            y += 32;
+        }
 
         this._drawHint(ctx, 'Click anywhere or press ESC to go back');
         ctx.restore();

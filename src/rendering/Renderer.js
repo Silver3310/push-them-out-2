@@ -141,6 +141,7 @@ export class Renderer {
         });
 
         // Game timer — bottom-right, format "M:SS left"
+        // Displayed bold and large so the player can always read it at a glance.
         // Turns urgent red with a pulsing glow when less than 60 s remain,
         // and pulses faster in the final 15 s.
         if (timeRemaining !== null) {
@@ -150,13 +151,17 @@ export class Renderer {
             const label    = `${mins}:${String(secs).padStart(2, '0')} left`;
             const isUrgent = timeRemaining < 60;
 
-            ctx.font      = `bold ${isUrgent ? 15 : 13}px 'Courier New'`;
+            ctx.font      = `bold ${isUrgent ? 20 : 17}px 'Courier New'`;
             ctx.textAlign = 'right';
-            ctx.fillStyle = isUrgent ? '#ff4422' : 'rgba(255,255,255,0.55)';
+            ctx.fillStyle = isUrgent ? '#ff4422' : 'rgba(255,255,255,0.85)';
             if (isUrgent) {
                 const hz = timeRemaining < 15 ? 0.014 : 0.007;
                 ctx.shadowColor = '#ff2200';
-                ctx.shadowBlur  = 10 * (0.5 + 0.5 * Math.sin(Date.now() * hz));
+                ctx.shadowBlur  = 14 * (0.5 + 0.5 * Math.sin(Date.now() * hz));
+            } else {
+                // Subtle constant glow so it's readable against any background
+                ctx.shadowColor = 'rgba(200,220,255,0.6)';
+                ctx.shadowBlur  = 6;
             }
             ctx.fillText(label, W - 20, H - 20);
             ctx.shadowBlur = 0;
@@ -211,20 +216,20 @@ export class Renderer {
         ctx.textBaseline = 'middle';
 
         warnings.forEach((w, i) => {
-            const yLabel = 58 + i * 38;
-            const ySecs  = yLabel + 22;
+            const yLabel = 58 + i * 48;
+            const ySecs  = yLabel + 28;
 
-            ctx.font         = `bold 22px 'Courier New'`;
+            ctx.font         = `bold 26px 'Courier New'`;
             ctx.fillStyle    = '#ff4400';
             ctx.shadowColor  = '#ff2200';
-            ctx.shadowBlur   = 14;
+            ctx.shadowBlur   = 18;
             ctx.fillText(`!! ${w.label} !!`, W / 2, yLabel);
 
             const secs = Math.ceil(w.countdown);
-            ctx.font        = `bold 16px 'Courier New'`;
+            ctx.font        = `bold 19px 'Courier New'`;
             ctx.fillStyle   = '#ffaa00';
             ctx.shadowColor = '#ff8800';
-            ctx.shadowBlur  = 8;
+            ctx.shadowBlur  = 10;
             ctx.fillText(`${secs}s`, W / 2, ySecs);
         });
 
