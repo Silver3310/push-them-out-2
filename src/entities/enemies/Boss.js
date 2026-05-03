@@ -33,7 +33,7 @@ const RayState = Object.freeze({
  * boss-only mechanics that are NOT exposed via `EnemyAbility` because they
  * are bespoke to this class:
  *
- *   - **Dash**      : when the player crosses `BOSS_DASH_TRIGGER_DIST`, the
+ *   - **Dash**      : the
  *                     boss bursts toward them via `dash()`. Driven by
  *                     `BossController`, capped on the boss-side by
  *                     `BOSS_MAX_SPEED` (higher than the player's clamp).

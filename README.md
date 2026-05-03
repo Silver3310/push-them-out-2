@@ -155,7 +155,7 @@ SHOOTER ability is on cooldown). The final level uses
 [`BossController`](src/entities/enemies/BossController.js), which add
 two boss-only mechanics on top of the same base behaviour:
 
-- **Dash** — when the player crosses `BOSS_DASH_TRIGGER_DIST`, the boss
+- **Dash** — the boss
   bursts toward them via direct velocity assignment (faster than the
   player-cap; capped on the boss-side by `BOSS_MAX_SPEED`). Cooldown
   controlled by `BOSS_DASH_COOLDOWN`.
