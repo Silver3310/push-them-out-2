@@ -247,7 +247,7 @@ class Game {
         this._playerController = new PlayerController(player, this.input, this);
 
         // Build the enemy roster declared by the active level.
-        this._rebuildEnemies(this.levels.current);
+        this._rebuildEnemies(this.levels.current, { skipWarnings: true });
 
         // Seed the board with the initial star population
         this.stars = [];
@@ -322,7 +322,7 @@ class Game {
      * Bullets are cleared at the same time so a shot fired by an enemy from
      * the previous level doesn't hit a player on the new one.
      */
-    _rebuildEnemies(level) {
+    _rebuildEnemies(level, options = {}) {
         for (const e of this.enemies) e.destroy();
         this.bullets        = [];
         this.enemies        = [];
@@ -330,13 +330,18 @@ class Game {
         this._aiControllers = [];
 
         for (const factory of this._enemySpawnPlan(level)) {
-            this._warningManager.schedule({
-                x:      factory.x,
-                y:      factory.y,
-                radius: factory.radius,
-                kind:   factory.kind,
-                onFire: () => this._spawnPlannedEnemy(factory),
-            });
+            if (options.skipWarnings) {
+                // Skip warnings and spawn immediately
+                this._spawnPlannedEnemy(factory);
+            } else {
+                this._warningManager.schedule({
+                    x:      factory.x,
+                    y:      factory.y,
+                    radius: factory.radius,
+                    kind:   factory.kind,
+                    onFire: () => this._spawnPlannedEnemy(factory),
+                });
+            }
         }
     }
 
