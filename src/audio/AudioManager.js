@@ -156,6 +156,26 @@ export class AudioManager {
     }
 
     /**
+     * Play the intro music track (manifest key `introMusic`). Crossfades from
+     * any currently-playing track. Called by Game when the intro screen opens.
+     */
+    playIntroMusic() {
+        const key = this._manifest?.introMusic;
+        if (!key) return;
+        this._playMusicByKey(key, this._musicCrossfadeSec);
+    }
+
+    /**
+     * Play the outro music track (manifest key `outroMusic`). Crossfades from
+     * any currently-playing track. Called by Game when the outro screen opens.
+     */
+    playOutroMusic() {
+        const key = this._manifest?.outroMusic;
+        if (!key) return;
+        this._playMusicByKey(key, this._musicCrossfadeSec);
+    }
+
+    /**
      * Play the music for `levelId` (matching `musicByLevel[String(levelId)]`).
      * Crossfades from any currently-playing track. Unknown level ids fall
      * back silently to the previous track so missing entries don't kill the
@@ -211,16 +231,15 @@ export class AudioManager {
         eventBus.on(GameEvents.PLAY_MUSIC,  ({ key } = {}) => this._playMusicByKey(key, this._musicCrossfadeSec));
         eventBus.on(GameEvents.STOP_MUSIC,  ()             => this.stopMusic(this._musicCrossfadeSec));
 
-        // Per-level soundtracks. MENU_START_GAME triggers level 1 (the
-        // initial `_buildLevel` doesn't fire LEVEL_TRANSITION_MID); every
-        // subsequent level swap rides the visual cross-fade midpoint.
-        eventBus.on(GameEvents.MENU_START_GAME,       ()          => this.playLevelMusic(1));
+        // Per-level soundtracks. INTRO_DISMISSED triggers level 1 music (the
+        // intro screen owns the intro track; dismissing it hands off to level 1).
+        // Every subsequent level swap rides the visual cross-fade midpoint.
+        eventBus.on(GameEvents.INTRO_DISMISSED,       ()          => this.playLevelMusic(1));
         eventBus.on(GameEvents.LEVEL_TRANSITION_MID,  ({ level }) => this.playLevelMusic(level.id));
 
-        eventBus.on(GameEvents.GAME_VICTORY, () => {
-            this.stopMusic(this._musicCrossfadeSec);
-            this.playSfx('victory');
-        });
+        // GAME_VICTORY music is handled by Game.js: it calls playOutroMusic()
+        // directly so the crossfade into the outro track is owned in one place.
+        // The victory SFX is omitted here in favour of the outro music itself.
     }
 
     /**

@@ -48,6 +48,18 @@
             "src": "assets/sprites/enemies/boss.png",
             "width": 180,
             "height": 180
+        },
+        "ui_intro": {
+            "_comment": "Full-screen intro splash shown after the player clicks 'Start game' from the menu. 1280x720 authored resolution.",
+            "src": "assets/sprites/ui/intro.png",
+            "width": 1280,
+            "height": 720
+        },
+        "ui_outro": {
+            "_comment": "Full-screen outro splash shown after all levels are cleared. 1280x720 authored resolution.",
+            "src": "assets/sprites/ui/outro.png",
+            "width": 1280,
+            "height": 720
         }
     }
 }
