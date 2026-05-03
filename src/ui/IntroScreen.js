@@ -73,7 +73,8 @@ export class IntroScreen {
             ctx.fillRect(0, 0, W, H);
         }
 
-        this._drawWavingText(ctx, 'Click any button to save the stars', W * 0.72, H * 0.55);
+        this._drawWavingText(ctx, 'Click any button', W * 0.85, H * 0.55);
+        this._drawWavingText(ctx, 'To save the stars', W * 0.85, H * 0.65);
     }
 
     _drawWavingText(ctx, text, centerX, centerY) {
