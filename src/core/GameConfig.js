@@ -1,4 +1,7 @@
 export const GameConfig = Object.freeze({
+    // Ten-minute per-run countdown. When this reaches zero the player sees
+    // the game-over screen. Resets each time a new game begins.
+    GAME_TIMER_DURATION: 600,
     CANVAS_WIDTH:  1280,
     CANVAS_HEIGHT: 720,
     TARGET_FPS:    60,
@@ -39,13 +42,19 @@ export const GameConfig = Object.freeze({
     BOSS_MASS:                8.0,
     BOSS_MAX_SPEED:           14,   // boss can exceed PLAYER_MAX_SPEED while dashing
     BOSS_SHOOT_INTERVAL:      2.5,
-    BOSS_DASH_TRIGGER_DIST:   240,  // dash when player is closer than this
+    // BOSS_DASH_TRIGGER_DIST removed — the boss now dashes regardless of
+    // distance; the only gate is the cooldown timer below.
     BOSS_DASH_COOLDOWN:       3.0,
     BOSS_DASH_SPEED:          11,   // direct velocity-set magnitude (px/frame)
     BOSS_RAY_INTERVAL:        6.0,  // seconds between ray attacks
     BOSS_RAY_TELEGRAPH:       1.2,  // seconds the warning line is visible
     BOSS_RAY_DURATION:        0.35, // seconds the lethal ray is rendered/active
     BOSS_RAY_THICKNESS:       28,   // pixel width of the killing ray hitbox
+    // Probability (0–1) that a given ray attack fires as a three-ray spread
+    // instead of a single beam. Each outer ray is offset by BOSS_RAY_SPREAD
+    // radians from the primary direction.
+    BOSS_TRIPLE_RAY_CHANCE:   0.30,
+    BOSS_RAY_SPREAD:          0.55, // ~31° offset per outer ray
 
     // Player invulnerability after respawn — short grace window so a boss
     // sitting on the spawn point or a lingering bullet doesn't produce a
@@ -99,6 +108,18 @@ export const GameConfig = Object.freeze({
     BLACK_HOLE_STORM_INTERVAL:    60.0,  // seconds between 3-at-once storm events
     BLACK_HOLE_STORM_SIZE:           3,
     BLACK_HOLE_WARNING_TIME:       8.0,  // lead-in seconds for the on-screen warning
+
+    // Arena Singularity (level 5 exclusive)
+    // A permanent, map-wide gravity well centred in the arena. Its pull
+    // radius intentionally exceeds the canvas diagonal so every object on
+    // the board is always being nudged inward — a constant, escalating
+    // challenge. Forces are gentle compared with the transient BlackHole
+    // hazard; the kill radius is small and requires deliberate inattention
+    // to reach. The boss is immune (same rule as for transient black holes).
+    ARENA_SINGULARITY_PULL_RADIUS: 850,  // > canvas diagonal → covers full map
+    ARENA_SINGULARITY_KILL_RADIUS:  28,  // lethal core (small — requires effort to reach)
+    ARENA_SINGULARITY_PULL_FORCE:  0.07, // radial impulse per tick (scaled by falloff)
+    ARENA_SINGULARITY_SWIRL_FORCE: 0.10, // tangential impulse per tick
 
     // Cakes (introduced level 3)
     // Cakes are static, player-sized pickups. Touching one applies a

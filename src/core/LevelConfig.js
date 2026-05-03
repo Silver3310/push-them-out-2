@@ -170,10 +170,15 @@ export const EnemyAbility = Object.freeze({
 
 /**
  * @typedef {object} HazardConfig
- * @property {boolean} [asteroids]   Asteroid manager runs on this level.
- * @property {boolean} [blackHoles]  Black-hole manager runs on this level.
- * @property {boolean} [cakes]       Cake manager runs on this level.
- * @property {boolean} [bombs]       Bomb manager runs on this level.
+ * @property {boolean} [asteroids]        Asteroid manager runs on this level.
+ * @property {boolean} [blackHoles]       Black-hole manager runs on this level.
+ * @property {boolean} [cakes]            Cake manager runs on this level.
+ * @property {boolean} [bombs]            Bomb manager runs on this level.
+ * @property {boolean} [levelSingularity] Spawn the permanent map-wide
+ *   {@link ArenaSingularity} at the canvas centre. Exclusive to Level 5 —
+ *   the singularity is created on level entry and destroyed on exit. The boss
+ *   is immune to its effects by the same rule that applies to transient black
+ *   holes and asteroids.
  *
  * Game.js applies these flags via each manager's `setEnabled`, which
  * spawns instances when on and clears them when off.
@@ -338,12 +343,18 @@ export const LEVELS = Object.freeze([
             abilityMessage: 'They are even more aggressive — be quick!',
         },
         hazards: {
-            asteroids:  true,
-            blackHoles: true,
-            cakes:      true,
-            bombs:      true,
+            asteroids:        true,
+            blackHoles:       true,
+            cakes:            true,
+            bombs:            true,
+            // Level 5 exclusive: a permanent map-wide gravity well at the
+            // arena centre. Pulls every movable object inward continuously,
+            // adding sustained positional pressure on top of all other hazards.
+            levelSingularity: true,
         },
-        hazardMessages: {},
+        hazardMessages: {
+            levelSingularity: 'A singularity has formed at the centre — everything is being pulled in!',
+        },
         spriteOverrides: _spritesForLevelDir('level5'),
     },
     {
