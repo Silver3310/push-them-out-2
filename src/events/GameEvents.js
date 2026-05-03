@@ -81,4 +81,10 @@ export const GameEvents = Object.freeze({
     // Notifications (emit to display a galaxy-style slide-in panel)
     // Payload: { message: string, duration?: number }
     SHOW_NOTIFICATION: 'ui:showNotification',
+
+    // Spawn warning — fired the moment a yellow telegraph circle appears at
+    // the future spawn point of a hazardous entity. AudioManager turns this
+    // into a short "incoming" beep so the audio cue lands with the visual.
+    // Payload: { x: number, y: number, radius: number, kind: string }
+    SPAWN_WARNING: 'spawn:warning',
 });

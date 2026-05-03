@@ -1,6 +1,7 @@
 import { GameConfig }  from './GameConfig.js';
 import { GameState }   from './GameState.js';
 import { LevelManager } from './LevelManager.js';
+import { DEFAULT_PLANET_SPRITE_KEYS as DEFAULT_PLANET_SPRITES } from './LevelConfig.js';
 import { eventBus }    from '../events/EventBus.js';
 import { GameEvents }  from '../events/GameEvents.js';
 import { InputHandler } from '../events/InputHandler.js';
@@ -23,6 +24,7 @@ import { AsteroidManager }      from '../logic/AsteroidManager.js';
 import { BlackHoleManager }     from '../logic/BlackHoleManager.js';
 import { CakeManager }          from '../logic/CakeManager.js';
 import { BombManager }          from '../logic/BombManager.js';
+import { WarningManager }       from '../logic/WarningManager.js';
 import { Menu }                 from '../ui/Menu.js';
 import { NotificationManager }  from '../ui/NotificationManager.js';
 
@@ -78,6 +80,12 @@ class Game {
         this._blackHoleManager = null;
         this._cakeManager      = null;
         this._bombManager      = null;
+
+        // Centralised "spawn telegraph" service. Hazardous spawns flow through
+        // this manager so the player always sees a yellow warning circle
+        // before a black hole / bomb / boss / spiked enemy materialises in
+        // their face. See WarningManager for the contract.
+        this._warningManager   = new WarningManager();
 
         this.menu           = null;
         this._notifications = null;
@@ -214,16 +222,24 @@ class Game {
 
         // Planet obstacles as bumpers. Colours come from the active level's
         // palette and are recoloured each frame during level transitions
-        // (see _applyLevelPalette).
-        const palette = this.levels.current.planetPalette;
-        this.planets = [
-            new Planet(320,       240,      55, palette[0]),
-            new Planet(960,       480,      55, palette[1]),
-            new Planet(W / 2,     190,      40, palette[2]),
-            new Planet(W / 2,     H - 190,  40, palette[3]),
-            new Planet(190,       H / 2,    45, palette[4]),
-            new Planet(W - 190,   H / 2,    45, palette[5]),
+        // (see _applyLevelPalette). The sprite-key array picks which entry
+        // from `assets/sprites/sprites.json` each planet should render —
+        // the colour from the palette is then used as the multiply tint, so
+        // a single black/white sprite reskins per palette automatically.
+        const level    = this.levels.current;
+        const palette  = level.planetPalette;
+        const skins    = level.planetSprites ?? DEFAULT_PLANET_SPRITES;
+        const PLANET_DEFS = [
+            { x: 320,     y: 240,     r: 55 },
+            { x: 960,     y: 480,     r: 55 },
+            { x: W / 2,   y: 190,     r: 40 },
+            { x: W / 2,   y: H - 190, r: 40 },
+            { x: 190,     y: H / 2,   r: 45 },
+            { x: W - 190, y: H / 2,   r: 45 },
         ];
+        this.planets = PLANET_DEFS.map((d, i) =>
+            new Planet(d.x, d.y, d.r, palette[i], skins[i] ?? skins[0], this.sprites),
+        );
 
         // Human player (centre)
         const player = new Player(W / 2, H / 2, PLAYER_COLORS[1], 'Sweet Bulldog');
@@ -244,18 +260,23 @@ class Game {
         // safe-spawn checks can avoid the existing planets and pocket holes
         // without each manager needing a hard reference to Game state.
         const obstacleProvider = () => [...this.holes, ...this.planets];
+        const warnings         = this._warningManager;
+
+        // Drop any warnings carried over from a prior run before any manager
+        // queues new ones during this build.
+        warnings.reset();
 
         if (this._asteroidManager)  this._asteroidManager.reset();
         else this._asteroidManager  = new AsteroidManager(this.sprites);
 
         if (this._blackHoleManager) this._blackHoleManager.reset();
-        else this._blackHoleManager = new BlackHoleManager(this.sprites, { getObstacles: obstacleProvider });
+        else this._blackHoleManager = new BlackHoleManager(this.sprites, { getObstacles: obstacleProvider, warnings });
 
         if (this._cakeManager)      this._cakeManager.reset();
         else this._cakeManager      = new CakeManager(this.sprites, { getObstacles: obstacleProvider });
 
         if (this._bombManager)      this._bombManager.reset();
-        else this._bombManager      = new BombManager(this.sprites, { getObstacles: obstacleProvider });
+        else this._bombManager      = new BombManager(this.sprites, { getObstacles: obstacleProvider, warnings });
 
         // Apply the starting level's hazard flags so managers are correctly
         // armed/silent before the first frame.
@@ -290,50 +311,96 @@ class Game {
      * of every level transition so the visual cross-fade lands in sync with
      * the new gameplay difficulty.
      *
+     * Each prospective spawn is gated by a {@link WarningManager} telegraph:
+     * the old enemies are destroyed immediately (so they don't keep shooting
+     * during the level handover) and the new ones materialise only when
+     * their yellow warning circle expires. While the warnings are in flight,
+     * `this.enemies` is empty and the playfield is briefly enemy-free —
+     * intentional, it gives the player a clean breath between levels and
+     * eliminates the "boss spawns on top of you" failure mode.
+     *
      * Bullets are cleared at the same time so a shot fired by an enemy from
      * the previous level doesn't hit a player on the new one.
      */
     _rebuildEnemies(level) {
         for (const e of this.enemies) e.destroy();
-        this.bullets = [];
+        this.bullets        = [];
+        this.enemies        = [];
+        this._boss          = null;
+        this._aiControllers = [];
 
-        this.enemies = this._createEnemies(level);
-        this._boss   = this.enemies.find(e => e.hasTag('boss')) ?? null;
-
-        const worldRef = { holes: this.holes, players: this.players };
-        this._aiControllers = this.enemies.map(e =>
-            e.hasTag('boss')
-                ? new BossController(e, worldRef, this)
-                : new AIController(e, worldRef, this)
-        );
+        for (const factory of this._enemySpawnPlan(level)) {
+            this._warningManager.schedule({
+                x:      factory.x,
+                y:      factory.y,
+                radius: factory.radius,
+                kind:   factory.kind,
+                onFire: () => this._spawnPlannedEnemy(factory),
+            });
+        }
     }
 
     /**
-     * Build the entity instances for `level.enemies`. Boss levels return a
-     * single `Boss`; everyone else gets `count` `Enemy` instances sharing
-     * the level's tint colour and ability set.
+     * Compute every enemy that needs to materialise for `level`, returning a
+     * list of "spawn factories". Each entry carries the spawn position, the
+     * radius the warning ring should match, a `kind` tag for telemetry, and
+     * a closure that constructs the actual entity. {@link _spawnPlannedEnemy}
+     * is what eventually invokes those closures once the warning fires.
+     *
+     * @returns {{
+     *   x: number, y: number, radius: number, kind: string,
+     *   build: () => import('../entities/enemies/Enemy.js').Enemy,
+     * }[]}
      */
-    _createEnemies(level) {
+    _enemySpawnPlan(level) {
         const W = GameConfig.CANVAS_WIDTH;
         const H = GameConfig.CANVAS_HEIGHT;
         const cfg = level.enemies;
 
         if (cfg.boss) {
-            return [
-                new Boss(W * 0.78, H / 2, cfg.color, 'BOSS', this.sprites),
-            ];
+            const radius = GameConfig.PLAYER_RADIUS * GameConfig.BOSS_RADIUS_MULT;
+            return [{
+                x: W * 0.78, y: H / 2, radius, kind: 'boss',
+                build: () => new Boss(W * 0.78, H / 2, cfg.color, 'BOSS', this.sprites),
+            }];
         }
 
-        const result = [];
+        const plan = [];
         for (let i = 0; i < cfg.count; i++) {
             const slot = ENEMY_SPAWN_SLOTS[i % ENEMY_SPAWN_SLOTS.length];
-            const x = slot.x < 0 ? W + slot.x : slot.x;
-            const y = slot.y < 0 ? H + slot.y : slot.y;
-            result.push(new Enemy(x, y, cfg.color, 'AI', this.sprites, {
-                abilities: cfg.abilities,
-            }));
+            const x    = slot.x < 0 ? W + slot.x : slot.x;
+            const y    = slot.y < 0 ? H + slot.y : slot.y;
+            // Spiked enemies get the more attention-grabbing 'spikedEnemy'
+            // kind so listeners (audio cues, telemetry) can branch on it.
+            const kind = cfg.abilities?.includes('spiked') ? 'spikedEnemy' : 'enemy';
+            plan.push({
+                x, y, radius: GameConfig.ENEMY_RADIUS, kind,
+                build: () => new Enemy(x, y, cfg.color, 'AI', this.sprites, {
+                    abilities: cfg.abilities,
+                }),
+            });
         }
-        return result;
+        return plan;
+    }
+
+    /**
+     * Materialise a single planned enemy and wire its AI controller. Called
+     * exactly once per enemy when its warning circle expires. Skipped silently
+     * if the level has already advanced past the one this enemy was planned
+     * for (e.g. the player blitzed through a level while warnings were still
+     * in flight) — we detect that by stamping each factory with the level
+     * index and comparing here.
+     */
+    _spawnPlannedEnemy(factory) {
+        const enemy = factory.build();
+        this.enemies.push(enemy);
+        if (enemy.hasTag('boss')) this._boss = enemy;
+
+        const worldRef = { holes: this.holes, players: this.players };
+        const ai = enemy.hasTag('boss')
+            ? new BossController(enemy, worldRef, this)
+            : new AIController(enemy, worldRef, this);
+        this._aiControllers.push(ai);
     }
 
     addBullet(bullet) {
@@ -504,6 +571,12 @@ class Game {
         this._updateAsteroids(dt);
         this._updateCakes(dt);
         this._updateBombs(dt);
+
+        // Tick the spawn-warning telegraphs AFTER the hazard managers above —
+        // a warning whose timer just expired needs to invoke its onFire to
+        // create the actual hazard, and we want that fresh hazard to also
+        // be live for the rest of this update loop's downstream listeners.
+        this._warningManager.update(dt);
 
         // Keep audio listener at player position for spatial sound
         const p = this.players[0];
@@ -927,6 +1000,11 @@ class Game {
         // Black holes render under entities so the player ball appears to
         // be visibly drawn into the void rather than hidden behind it.
         this._blackHoleManager?.blackHoles.forEach(bh => bh.render(ctx));
+
+        // Spawn-warning telegraphs sit ABOVE planets/cakes/bombs but BELOW
+        // entities, so the player ball is visibly inside the danger zone
+        // and can clearly see "I need to leave this circle".
+        this._warningManager.render(ctx);
 
         [...this.enemies, ...this.players].forEach(b => b.render(ctx));
         this.bullets.forEach(b => b.render(ctx));

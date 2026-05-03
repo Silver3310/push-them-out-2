@@ -23,6 +23,16 @@ import { ShowerScheduler } from './ShowerScheduler.js';
  * level transition based on `LEVELS[i].hazards.blackHoles`. When disabled,
  * `update()` flushes any live instances.
  *
+ * ### Spawn telegraph
+ *
+ * A {@link WarningManager}, when supplied via the `warnings` option,
+ * receives every prospective spawn site and renders a yellow exclamation
+ * circle there for `GameConfig.SPAWN_WARNING_DURATION` seconds. The actual
+ * `BlackHole` entity is only constructed once the warning fires, giving
+ * the player a fixed grace window to vacate the area. While a warning is
+ * pending, `_pendingSpawns` is incremented so the manager doesn't queue
+ * duplicates over the same slot.
+ *
  * Collision side-effects (player kill, enemy kill, star removal, asteroid
  * destruction) are NOT handled here — Game.js owns those rules so they
  * funnel through the same death paths used by holes and asteroids.
@@ -34,16 +44,29 @@ export class BlackHoleManager {
      * @param {()=>{x:number,y:number,radius:number}[]} [opts.getObstacles]
      *                  Returns world obstacles (planets, holes) used for
      *                  safe-spawn rejection. Falsy => no rejection.
+     * @param {import('./WarningManager.js').WarningManager|null} [opts.warnings]
+     *                  When supplied every spawn is preceded by a yellow
+     *                  telegraph circle. Falsy => spawn instantly (legacy
+     *                  behaviour, useful for tests).
      */
-    constructor(sprites = null, { getObstacles = null } = {}) {
+    constructor(sprites = null, { getObstacles = null, warnings = null } = {}) {
         this._sprites      = sprites;
         this._getObstacles = getObstacles;
+        this._warnings     = warnings;
 
         /** @type {BlackHole[]} */
         this.blackHoles = [];
 
         /** @type {boolean} Whether the level wants this hazard active. */
         this.enabled = false;
+
+        /**
+         * Number of spawns that are currently behind a warning circle but
+         * have not materialised yet. Treated as "live" by the cadence logic
+         * so the spawn timer doesn't pile up duplicate warnings.
+         * @type {number}
+         */
+        this._pendingSpawns = 0;
 
         this._scheduler = new ShowerScheduler({
             interval:    GameConfig.BLACK_HOLE_STORM_INTERVAL,
@@ -94,12 +117,15 @@ export class BlackHoleManager {
             this._triggerStorm(W, H);
         }
 
-        // Solo replenishment between storms — only when the board is empty.
-        if (this.blackHoles.length === 0) {
+        // Solo replenishment between storms — only when the board is fully
+        // clear of both live and pending instances. Without this, a lingering
+        // warning would let the timer keep ticking and pile a second warning
+        // on top of the first.
+        if (this.blackHoles.length === 0 && this._pendingSpawns === 0) {
             this._spawnTimer -= dt;
             if (this._spawnTimer <= 0) {
                 this._spawnTimer = GameConfig.BLACK_HOLE_SPAWN_INTERVAL;
-                this.blackHoles.push(this._spawnOne(W, H));
+                this._queueSpawn(W, H);
             }
         }
     }
@@ -108,7 +134,8 @@ export class BlackHoleManager {
     reset() {
         this._clearAll();
         this._scheduler.reset();
-        this._spawnTimer = GameConfig.BLACK_HOLE_SPAWN_INTERVAL * 0.5;
+        this._spawnTimer    = GameConfig.BLACK_HOLE_SPAWN_INTERVAL * 0.5;
+        this._pendingSpawns = 0;
     }
 
     // -------------------------------------------------------------------------
@@ -123,17 +150,51 @@ export class BlackHoleManager {
     _triggerStorm(W, H) {
         const count = GameConfig.BLACK_HOLE_STORM_SIZE;
         for (let i = 0; i < count; i++) {
-            this.blackHoles.push(this._spawnOne(W, H));
+            this._queueSpawn(W, H);
         }
     }
 
     /**
-     * Pick a safe random position (inside the play field, away from the
-     * existing pocket holes and planets) and return a fresh BlackHole.
+     * Pick a safe spawn position now and either spawn the BlackHole instantly
+     * (no WarningManager configured — used by tests) or hand the position to
+     * the WarningManager so a yellow telegraph runs first and the entity is
+     * constructed inside the warning's `onFire` callback.
+     *
+     * Picking the position upfront — rather than at fire-time — guarantees
+     * the visible telegraph and the eventual entity occupy the exact same
+     * coordinates, which is the whole contract of the warning system.
      */
-    _spawnOne(W, H) {
-        const r       = GameConfig.BLACK_HOLE_PULL_RADIUS;
-        const inset   = r + 30;
+    _queueSpawn(W, H) {
+        const pos = this._pickSpawnPosition(W, H);
+
+        if (!this._warnings) {
+            // Legacy / test path — fire instantly.
+            this.blackHoles.push(new BlackHole(pos.x, pos.y, this._sprites));
+            return;
+        }
+
+        this._pendingSpawns++;
+        this._warnings.schedule({
+            x:      pos.x,
+            y:      pos.y,
+            radius: GameConfig.BLACK_HOLE_PULL_RADIUS,
+            kind:   'blackHole',
+            onFire: () => {
+                this._pendingSpawns = Math.max(0, this._pendingSpawns - 1);
+                if (!this.enabled) return; // Hazard turned off mid-warning.
+                this.blackHoles.push(new BlackHole(pos.x, pos.y, this._sprites));
+            },
+        });
+    }
+
+    /**
+     * Choose a safe random spawn position (inside the play field, away from
+     * the existing pocket holes and planets, and not stacked on top of an
+     * already live black hole).
+     */
+    _pickSpawnPosition(W, H) {
+        const r         = GameConfig.BLACK_HOLE_PULL_RADIUS;
+        const inset     = r + 30;
         const obstacles = this._getObstacles?.() ?? [];
 
         let x, y;
@@ -142,7 +203,7 @@ export class BlackHoleManager {
             y = inset + Math.random() * (H - inset * 2);
             if (this._isFarEnough(x, y, obstacles, r)) break;
         }
-        return new BlackHole(x, y, this._sprites);
+        return { x, y };
     }
 
     _isFarEnough(x, y, obstacles, r) {

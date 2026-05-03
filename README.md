@@ -96,16 +96,20 @@ and the rest of the engine picks it up automatically.
 
 ### Per-level art
 
-Three entity sprite keys can be customised per level — they're listed in
+Several entity sprite keys can be customised per level — they're listed in
 `LEVEL_SPRITE_KEYS` inside [`src/core/LevelConfig.js`](src/core/LevelConfig.js):
 
-| Key                | Drawn by                                            |
-| ------------------ | --------------------------------------------------- |
-| `star_collectible` | [`Star`](src/entities/objects/Star.js)              |
-| `asteroid`         | [`Asteroid`](src/entities/objects/Asteroid.js)      |
-| `enemy_ball`       | [`Enemy`](src/entities/enemies/Enemy.js)            |
+| Key                | Drawn by                                            | Notes                              |
+| ------------------ | --------------------------------------------------- | ---------------------------------- |
+| `star_collectible` | [`Star`](src/entities/objects/Star.js)              |                                    |
+| `asteroid`         | [`Asteroid`](src/entities/objects/Asteroid.js)      |                                    |
+| `enemy_ball`       | [`Enemy`](src/entities/enemies/Enemy.js)            |                                    |
+| `planet_green`     | [`Planet`](src/entities/objects/Planet.js)          | Tinted via `planetPalette`         |
+| `planet_orange`    | [`Planet`](src/entities/objects/Planet.js)          | Tinted via `planetPalette`         |
+| `planet_blue`      | [`Planet`](src/entities/objects/Planet.js)          | Tinted via `planetPalette`         |
+| `planet_pink`      | [`Planet`](src/entities/objects/Planet.js)          | Tinted via `planetPalette`         |
 
-A fourth key — `boss` — is only swapped on level 6 and is drawn by
+A fifth gameplay key — `boss` — is only swapped on level 6 and is drawn by
 [`Boss`](src/entities/enemies/Boss.js).
 
 Each entity follows the same pattern: if `SpriteManager.has(key)` returns
@@ -118,6 +122,28 @@ Drop your replacement PNGs at the conventional path —
 that level's `spriteOverrides` map in `LevelConfig.js`. Missing files
 leave the previously cached image in place (the game never breaks for
 missing assets).
+
+### Planets — sprite + tint
+
+Each level declares two related arrays for its six obstacle planets:
+
+```js
+planetSprites: ['planet_green', 'planet_green', 'planet_orange',
+                'planet_blue',  'planet_pink',  'planet_green'],
+planetPalette: ['#c8e06e', '#c8e06e', '#e0a06e',
+                '#6ec8e0', '#e06ec8', '#c8e06e'],
+```
+
+`planetSprites[i]` picks which manifest sprite key planet *i* uses, and
+`planetPalette[i]` is multiplied over that sprite as a tint via the
+SpriteManager's blend pass. A single **black-and-white** PNG can therefore
+back every planet on every level — the level palette is what gives each
+its identity, and the cross-fade between levels recolours them
+automatically along with the rest of the gradient.
+
+If the sprite is missing, the planet falls back to a procedural radial
+gradient (using the same palette colour) — so dropping or swapping the
+artwork can never break the level.
 
 ## Enemies
 
@@ -163,6 +189,42 @@ Enemy bullets are distinguished from player bullets by `bullet.kind`
 (see [`Bullet`](src/entities/objects/Bullet.js)). `Game._updateBullets`
 branches on that field so each kind only collides with its intended
 target.
+
+## Spawn warnings
+
+Hazardous entities never appear directly on top of the player. Whenever
+the game is about to place a black hole, a bomb, or a fresh enemy/boss,
+[`WarningManager`](src/logic/WarningManager.js) first paints a yellow
+**telegraph circle** at the future spawn point — same size as the
+incoming entity — for `GameConfig.SPAWN_WARNING_DURATION` seconds
+(3 s by default). Only when that timer expires is the actual entity
+constructed, giving the player a fixed grace window to vacate the area.
+
+The mechanism is callback-based: spawning code calls
+`warningManager.schedule({ x, y, radius, kind, onFire })` and `onFire` is
+what eventually instantiates the hazard. This keeps the manager focused
+on *timing and visualisation*; *what* gets spawned and *where it goes*
+stays with the caller.
+
+| Source                                       | Telegraphed | Notes                                                     |
+| -------------------------------------------- | ----------- | --------------------------------------------------------- |
+| Black hole (solo + storm)                    | Yes         | Telegraph radius = `BLACK_HOLE_PULL_RADIUS`               |
+| Bomb (solo + minefield)                      | Yes         | Telegraph radius = `BOMB_TRIGGER_RADIUS`                  |
+| Enemy / boss spawn at level transitions      | Yes         | Old enemies are cleared instantly; new ones materialise after the warning |
+| Enemy respawn after death                    | No          | Player just got a kill — fixed slots, no surprise         |
+| Cake, asteroid                               | No          | Asteroids fall from off-screen; cakes are beneficial bait |
+| Boss killing-ray                             | (existing telegraph line) | Already gives a `BOSS_RAY_TELEGRAPH` window |
+
+Warnings tick on the same physics step as the rest of the game, so they
+freeze cleanly during pause. They emit `GameEvents.SPAWN_WARNING` when
+shown — `AudioManager` turns this into a spatialised "incoming" beep at
+the future spawn point.
+
+To telegraph a NEW spawn source, instantiate or accept a `WarningManager`
+in the relevant manager and route the spawn through `schedule(...)`
+instead of constructing the entity directly. See
+[`BlackHoleManager._queueSpawn`](src/logic/BlackHoleManager.js) for the
+canonical pattern.
 
 ## Environmental hazards
 
@@ -242,17 +304,20 @@ Cadence: solo replenishment with `BOMB_RESPAWN_DELAY` cooldown; a
    sprite-or-procedural-fallback pattern used by `Star`, `Asteroid`, etc.
 2. Create the manager under `src/logic/MyHazardManager.js`. Compose a
    `ShowerScheduler` for the cadence and warning event, expose
-   `setEnabled`, `update(dt, W, H)`, and `reset()`.
+   `setEnabled`, `update(dt, W, H)`, and `reset()`. Accept an optional
+   `warnings` reference and route every spawn through
+   `warnings.schedule({ x, y, radius, kind, onFire })` so the player gets
+   the standard yellow telegraph circle before the hazard appears.
 3. Add a `MY_HAZARD_*` block of tunables to
    [`GameConfig`](src/core/GameConfig.js) and a `MY_HAZARD_WARNING`
    event name to [`GameEvents`](src/events/GameEvents.js).
 4. Register the sprite key in
    [`assets/sprites/sprites.json`](assets/sprites/sprites.json) (add a
    procedural fallback in the entity so missing files are non-fatal).
-5. Wire it into `Game.js`: instantiate in `_buildLevel`, call
-   `_applyHazardFlags`, drive `update()` from `_update()`, render in
-   `_render()`, and contribute a warning entry from
-   `_collectHazardWarnings()`.
+5. Wire it into `Game.js`: instantiate in `_buildLevel` (passing
+   `this._warningManager` as `warnings`), call `_applyHazardFlags`,
+   drive `update()` from `_update()`, render in `_render()`, and
+   contribute a warning entry from `_collectHazardWarnings()`.
 6. Flip the flag on whichever levels should run it inside
    [`LevelConfig.js`](src/core/LevelConfig.js).
 
@@ -346,6 +411,7 @@ The current bindings are:
 | `STAR_COLLECTED`                                 | `star_collected`   |
 | `PLAYER_ATE_CAKE`                                | `cake_eaten`       |
 | `ASTEROID/BLACK_HOLE/CAKE/BOMB_WARNING`          | `warning`          |
+| `SPAWN_WARNING` (per-spawn telegraph circle)     | `warning`          |
 | `SHOW_NOTIFICATION`                              | `notification`     |
 | `BOSS_RAY_TELEGRAPH`                             | `boss_ray`         |
 | `BALL_HIT` (`strength > 0.5`)                    | `ball_hit`         |

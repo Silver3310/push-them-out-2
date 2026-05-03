@@ -128,6 +128,17 @@ export const GameConfig = Object.freeze({
     BOMB_FIELD_SIZE:                  4,
     BOMB_WARNING_TIME:             7.0,
 
+    // Spawn warnings (yellow telegraph circle painted at the future spawn
+    // point of any hazardous entity — black hole, bomb, enemy, boss). Gives
+    // the player a fixed grace window to vacate the area before the threat
+    // materialises. Used by `WarningManager`; see also `BlackHoleManager`,
+    // `BombManager`, and `Game._rebuildEnemies`.
+    SPAWN_WARNING_DURATION: 3.0,
+    // Visual padding (authored-resolution px) added to a warning's radius so
+    // the yellow ring fully encloses the inbound entity, instead of sitting
+    // flush with its edge — easier to read at small radii.
+    SPAWN_WARNING_RADIUS_PADDING: 6,
+
     // Sprite auto-scale: all sprite sizes are authored for this reference resolution
     SPRITE_REFERENCE_WIDTH:  1280,
     SPRITE_REFERENCE_HEIGHT: 720,
