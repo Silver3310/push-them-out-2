@@ -14,7 +14,7 @@ import { GameConfig } from '../../core/GameConfig.js';
 
 const _DEFAULT_COLORS = Object.freeze({
     player: '#ffc864',
-    enemy:  '#ff66cc',
+    enemy:  '#ffffff',
 });
 
 export class Bullet extends Entity {

@@ -207,8 +207,8 @@ export const LEVELS = Object.freeze([
         starsToWin:   70,
         entryMessage: 'Good job! Now collect the 70 stars!',
         background: {
-            bgInner:      '#ffb070',
-            bgOuter:      '#d44070',
+            bgInner:      '#005e06',
+            bgOuter:      '#2eab4c',
             borderColor:  '#ff4477',
             borderShadow: '#ffcc66',
         },
@@ -236,7 +236,7 @@ export const LEVELS = Object.freeze([
         starsToWin:   80,
         entryMessage: 'Good job! Now collect the 80 stars!',
         background: {
-            bgInner:      '#e34d22',
+            bgInner:      '#a64023',
             bgOuter:      '#5c1a08',
             borderColor:  '#b03a18',
             borderShadow: '#ff6633',
@@ -302,7 +302,7 @@ export const LEVELS = Object.freeze([
             boss:           true,
             count:          1,
             abilities:      [EnemyAbility.SPIKED, EnemyAbility.SHOOTER],
-            color:          '#ff2244',
+            color:          '#fbfbfb',
             abilityMessage: 'FINAL BOSS! Spikes, shots, dashes, and deadly rays.',
         },
         hazards: {
