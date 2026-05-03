@@ -326,8 +326,8 @@ export const LEVELS = Object.freeze([
     {
         id:           5,
         name:         'LEVEL 5',
-        starsToWin:   90,
-        entryMessage: 'Good job! Now collect the 90 stars!',
+        starsToWin:   50,
+        entryMessage: 'Good job! Now collect the 50 stars!',
         background: {
             bgInner:      '#16215c',
             bgOuter:      '#070a26',
