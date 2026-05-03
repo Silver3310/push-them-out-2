@@ -6,25 +6,43 @@ const SILVER_THRESHOLD = 40;   // fewer than 40 deaths → silver
                                 // 40 or more deaths    → bronze
 
 /**
+ * Height of the dark header strip that holds session stats (left column) and
+ * the medal badge with rating rules (right column). Tall enough to contain all
+ * UI so the outro background image is completely unobstructed.
+ */
+const HEADER_H = 248;
+
+/** Height of the thin footer strip that holds the dismiss hint. */
+const FOOTER_H = 30;
+
+/**
  * Medal descriptor produced by `_getMedal(deaths)`.
- * @typedef {{ key: string, label: string, color: string, glowColor: string }} Medal
+ * @typedef {{ tier: string, spriteKey: string, label: string, color: string, glowColor: string, highlight: string, shadow: string, starColor: string }} Medal
  */
 
 /**
  * Full-screen outro splash shown after all levels are cleared.
  *
+ * ### Layout
+ * The screen is divided into three horizontal bands:
+ *
+ *   ┌─────────────────────────────────────────┐
+ *   │  HEADER (HEADER_H px)                   │
+ *   │  left col: SESSION STATS                │
+ *   │  right col: medal badge + rating rules  │
+ *   ├─────────────────────────────────────────┤
+ *   │  BACKGROUND IMAGE (unobstructed)        │
+ *   ├─────────────────────────────────────────┤
+ *   │  FOOTER (FOOTER_H px) – dismiss hint    │
+ *   └─────────────────────────────────────────┘
+ *
  * ### Medal system
- * The outro selects one of three tier-specific backgrounds based on the
- * player's total death count for the run:
+ * One of three tier-specific backgrounds is selected based on the player's
+ * total death count for the run:
  *
  *   < 20 deaths  → GOLD   (sprite: `ui_outro_gold`)
  *   < 40 deaths  → SILVER (sprite: `ui_outro_silver`)
  *   ≥ 40 deaths  → BRONZE (sprite: `ui_outro_bronze`)
- *
- * A drawn medal badge, tier label, and the rating rules are rendered on top
- * of the background so the player immediately knows their score and how to
- * improve it on the next run. The outro music (`Outro_Sound.wav`) plays for
- * all three tiers — only the background image and medal colour differ.
  *
  * ### Dismissal
  * ESC only — handled by `Game._setupEventListeners`. OutroScreen does not
@@ -72,9 +90,7 @@ export class OutroScreen {
         const medal = _getMedal(this._snapshot.playerDeaths);
 
         this._drawBackground(ctx, W, H, medal);
-        this._drawStatsPanel(ctx, W, medal);
-        this._drawMedalBadge(ctx, W, H, medal);
-        this._drawRatingRules(ctx, W, H, this._snapshot.playerDeaths);
+        this._drawHeaderPanel(ctx, W, medal, this._snapshot.playerDeaths);
         this._drawDismissHint(ctx, W, H);
     }
 
@@ -94,59 +110,86 @@ export class OutroScreen {
         }
     }
 
-    _drawStatsPanel(ctx, W, medal) {
-        const panelH = 130;
+    /**
+     * Full-width header strip. Draws the dark backing, a subtle column
+     * divider, then delegates to the two sub-sections.
+     */
+    _drawHeaderPanel(ctx, W, medal, deaths) {
         ctx.save();
 
-        // Dark backing strip
+        // Dark backing across the full width
         ctx.fillStyle = 'rgba(0, 0, 0, 0.72)';
-        ctx.fillRect(0, 0, W, panelH);
+        ctx.fillRect(0, 0, W, HEADER_H);
 
-        // "SESSION STATS" heading in medal colour
+        // Subtle vertical divider between left and right columns
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+        ctx.lineWidth   = 1;
+        ctx.beginPath();
+        ctx.moveTo(W / 2, 12);
+        ctx.lineTo(W / 2, HEADER_H - 12);
+        ctx.stroke();
+
+        ctx.restore();
+
+        this._drawStatsSection(ctx, W, medal);
+        this._drawMedalSection(ctx, W, medal, deaths);
+    }
+
+    /**
+     * Left column of the header: session statistics.
+     * Centred on x = W / 4.
+     */
+    _drawStatsSection(ctx, W, medal) {
+        const cx   = W / 4;
+        const snap = this._snapshot;
+
+        ctx.save();
         ctx.textAlign    = 'center';
         ctx.textBaseline = 'top';
-        ctx.fillStyle    = medal.color;
-        ctx.font         = `bold 34px 'Courier New'`;
-        ctx.shadowColor  = medal.glowColor;
-        ctx.shadowBlur   = 18;
-        ctx.fillText('SESSION STATS', W / 2, 14);
+
+        // "SESSION STATS" heading in medal colour
+        ctx.font        = `bold 30px 'Courier New'`;
+        ctx.fillStyle   = medal.color;
+        ctx.shadowColor = medal.glowColor;
+        ctx.shadowBlur  = 18;
+        ctx.fillText('SESSION STATS', cx, 18);
 
         // Core numbers
         ctx.shadowBlur = 0;
         ctx.fillStyle  = '#ffffff';
-        ctx.font       = `bold 21px 'Courier New'`;
-        const snap = this._snapshot;
+        ctx.font       = `bold 18px 'Courier New'`;
         ctx.fillText(
             `★ ${snap.starsCollected} collected  ·  ${snap.enemiesKilled} enemies  ·  ${snap.playerDeaths} deaths`,
-            W / 2, 58,
+            cx, 64,
         );
 
         // Secondary line
         ctx.fillStyle = 'rgba(220, 200, 150, 0.85)';
-        ctx.font      = `bold 15px 'Courier New'`;
+        ctx.font      = `bold 14px 'Courier New'`;
         ctx.fillText(
             `${snap.starsLost} star${snap.starsLost !== 1 ? 's' : ''} lost to holes`,
-            W / 2, 95,
+            cx, 100,
         );
 
         ctx.restore();
     }
 
-    _drawMedalBadge(ctx, W, H, medal) {
-        // Centre the badge in the middle band of the screen
-        const cx = W / 2;
-        const cy = H / 2 - 30;
-        const r  = 60;
+    /**
+     * Right column of the header: animated medal badge, tier label, and the
+     * three-row rating-rules guide. Centred on x = W * 3/4.
+     */
+    _drawMedalSection(ctx, W, medal, deaths) {
+        const cx      = (W * 3) / 4;
+        const r       = 38;
+        const badgeCY = 62;
 
+        // --- Animated badge ---
         ctx.save();
-
-        // Animated pulse — subtle scale throb
         const pulse = 1 + 0.03 * Math.sin(this._time * 3.5);
-
-        ctx.translate(cx, cy);
+        ctx.translate(cx, badgeCY);
         ctx.scale(pulse, pulse);
 
-        // Outer glow ring
+        // Outer glow halo
         const glow = ctx.createRadialGradient(0, 0, r * 0.5, 0, 0, r * 2);
         glow.addColorStop(0, medal.glowColor + '55');
         glow.addColorStop(1, medal.glowColor + '00');
@@ -155,93 +198,100 @@ export class OutroScreen {
         ctx.fillStyle = glow;
         ctx.fill();
 
-        // Medal circle background
+        // Medal circle body
         const grad = ctx.createRadialGradient(-r * 0.3, -r * 0.3, r * 0.1, 0, 0, r);
         grad.addColorStop(0, medal.highlight);
         grad.addColorStop(1, medal.shadow);
         ctx.beginPath();
         ctx.arc(0, 0, r, 0, Math.PI * 2);
-        ctx.fillStyle = grad;
+        ctx.fillStyle   = grad;
         ctx.shadowColor = medal.glowColor;
-        ctx.shadowBlur  = 24;
+        ctx.shadowBlur  = 20;
         ctx.fill();
 
-        // Dark outline
+        // Outline ring
         ctx.strokeStyle = 'rgba(0,0,0,0.45)';
         ctx.lineWidth   = 3;
         ctx.stroke();
         ctx.shadowBlur  = 0;
 
-        // Star inside the medal
         _drawStar(ctx, 0, 0, 5, r * 0.55, r * 0.25, medal.starColor);
 
         ctx.restore();
 
-        // Medal label below the badge
+        // --- Tier label ---
         ctx.save();
         ctx.textAlign    = 'center';
         ctx.textBaseline = 'top';
-        ctx.font         = `bold 40px 'Courier New'`;
+        ctx.font         = `bold 26px 'Courier New'`;
         ctx.fillStyle    = medal.color;
         ctx.shadowColor  = medal.glowColor;
-        ctx.shadowBlur   = 20;
-        ctx.fillText(medal.label, W / 2, cy + r + 18);
+        ctx.shadowBlur   = 16;
+        ctx.fillText(medal.label, cx, badgeCY + r + 10);
         ctx.restore();
+
+        // --- Rating guide ---
+        this._drawRatingRules(ctx, cx, deaths);
     }
 
-    _drawRatingRules(ctx, W, H, deaths) {
-        const panelW = 680;
-        const panelH = 110;
-        const px     = (W - panelW) / 2;
-        const py     = H - 200;
+    /**
+     * Three-row medal threshold guide rendered in the right column, below the
+     * badge. The tier the player achieved is highlighted with colour and an
+     * arrow prefix; the other two rows are dimmed.
+     *
+     * @param {CanvasRenderingContext2D} ctx
+     * @param {number} cx      Horizontal centre of the right column.
+     * @param {number} deaths  Player's total death count for the run.
+     */
+    _drawRatingRules(ctx, cx, deaths) {
+        const startY   = 152;
+        const achieved = _getMedal(deaths).tier;
 
         ctx.save();
-
-        // Semi-transparent panel
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.68)';
-        _roundRect(ctx, px, py, panelW, panelH, 10);
-        ctx.fill();
-
         ctx.textAlign    = 'center';
         ctx.textBaseline = 'top';
 
-        // Heading
-        ctx.font      = `bold 16px 'Courier New'`;
+        // Section heading
+        ctx.font      = `bold 13px 'Courier New'`;
         ctx.fillStyle = 'rgba(200, 230, 255, 0.9)';
-        ctx.fillText('HOW TO EARN A BETTER MEDAL', W / 2, py + 12);
+        ctx.fillText('HOW TO EARN A BETTER MEDAL', cx, startY);
 
-        // Three rows — highlight whichever tier the player achieved
         const rows = [
-            { deaths: `< ${GOLD_THRESHOLD} deaths`,   medal: 'GOLD',   color: MEDALS.gold.color,   glow: MEDALS.gold.glowColor   },
-            { deaths: `< ${SILVER_THRESHOLD} deaths`, medal: 'SILVER', color: MEDALS.silver.color, glow: MEDALS.silver.glowColor },
-            { deaths: `≥ ${SILVER_THRESHOLD} deaths`, medal: 'BRONZE', color: MEDALS.bronze.color, glow: MEDALS.bronze.glowColor },
+            { label: `< ${GOLD_THRESHOLD} deaths`,   medal: 'GOLD',   color: MEDALS.gold.color,   glow: MEDALS.gold.glowColor   },
+            { label: `< ${SILVER_THRESHOLD} deaths`, medal: 'SILVER', color: MEDALS.silver.color, glow: MEDALS.silver.glowColor },
+            { label: `≥ ${SILVER_THRESHOLD} deaths`, medal: 'BRONZE', color: MEDALS.bronze.color, glow: MEDALS.bronze.glowColor },
         ];
 
         rows.forEach((row, i) => {
-            const isActive = row.medal.toLowerCase() === _getMedal(deaths).tier;
-            const y = py + 42 + i * 24;
-            ctx.font      = isActive ? `bold 17px 'Courier New'` : `bold 14px 'Courier New'`;
-            ctx.fillStyle = isActive ? row.color : 'rgba(180,180,180,0.7)';
-            if (isActive) {
-                ctx.shadowColor = row.glow;
-                ctx.shadowBlur  = 10;
-            } else {
-                ctx.shadowBlur = 0;
-            }
-            const prefix = isActive ? '▶ ' : '  ';
-            ctx.fillText(`${prefix}${row.deaths}  →  ${row.medal} MEDAL`, W / 2, y);
+            const isActive = row.medal.toLowerCase() === achieved;
+            const y = startY + 22 + i * 22;
+            ctx.font        = isActive ? `bold 15px 'Courier New'` : `bold 12px 'Courier New'`;
+            ctx.fillStyle   = isActive ? row.color  : 'rgba(180,180,180,0.7)';
+            ctx.shadowColor = isActive ? row.glow   : 'transparent';
+            ctx.shadowBlur  = isActive ? 10 : 0;
+            ctx.fillText(`${isActive ? '▶ ' : '  '}${row.label}  →  ${row.medal} MEDAL`, cx, y);
         });
 
         ctx.restore();
     }
 
+    /**
+     * Thin footer strip at the very bottom with the dismiss prompt, keeping
+     * the outro background completely unobstructed.
+     */
     _drawDismissHint(ctx, W, H) {
         ctx.save();
+
+        // Dark backing so the hint is legible over any background colour
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+        ctx.fillRect(0, H - FOOTER_H, W, FOOTER_H);
+
         ctx.textAlign    = 'center';
-        ctx.textBaseline = 'bottom';
-        ctx.font         = `bold 15px 'Courier New'`;
+        ctx.textBaseline = 'middle';
+        ctx.font         = `bold 14px 'Courier New'`;
         ctx.fillStyle    = 'rgba(180, 220, 255, 0.65)';
-        ctx.fillText('Press ESC to return to menu', W / 2, H - 16);
+        ctx.fillText('Press ESC to return to menu', W / 2, H - FOOTER_H / 2);
+
         ctx.restore();
     }
 }
@@ -322,21 +372,4 @@ function _drawStar(ctx, cx, cy, points, outerR, innerR, color) {
     ctx.fillStyle = color;
     ctx.fill();
     ctx.restore();
-}
-
-/**
- * Trace a rounded rectangle path (does not fill/stroke — caller does that).
- */
-function _roundRect(ctx, x, y, w, h, r) {
-    ctx.beginPath();
-    ctx.moveTo(x + r, y);
-    ctx.lineTo(x + w - r, y);
-    ctx.arcTo(x + w, y,     x + w, y + r,     r);
-    ctx.lineTo(x + w, y + h - r);
-    ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
-    ctx.lineTo(x + r, y + h);
-    ctx.arcTo(x,     y + h, x,     y + h - r, r);
-    ctx.lineTo(x,     y + r);
-    ctx.arcTo(x,     y,     x + r, y,         r);
-    ctx.closePath();
 }
