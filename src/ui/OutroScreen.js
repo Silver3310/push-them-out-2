@@ -163,14 +163,6 @@ export class OutroScreen {
             cx, 64,
         );
 
-        // Secondary line
-        ctx.fillStyle = 'rgba(220, 200, 150, 0.85)';
-        ctx.font      = `bold 14px 'Courier New'`;
-        ctx.fillText(
-            `${snap.starsLost} star${snap.starsLost !== 1 ? 's' : ''} lost to holes`,
-            cx, 100,
-        );
-
         ctx.restore();
     }
 

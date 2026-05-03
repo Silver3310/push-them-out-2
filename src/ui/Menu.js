@@ -279,10 +279,6 @@ export class Menu {
         ctx.font = `bold 80px 'Courier New'`;
         ctx.fillText('PushThemOut - Time Is Out', W / 2, 160);
 
-        ctx.shadowBlur = 0;
-        ctx.font       = `18px 'Courier New'`;
-        ctx.fillStyle  = 'rgba(220, 240, 255, 0.7)';
-        ctx.fillText('Knock them into the holes — last one standing wins.', W / 2, 215);
         ctx.restore();
     }
 
