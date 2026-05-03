@@ -19,7 +19,9 @@
         "sfx_legacy":    ["ball_hit", "ball_in_hole", "shoot", "special", "respawn", "victory"]
     },
 
-    "menuMusic": "music_menu",
+    "menuMusic":  "music_menu",
+    "introMusic": "music_intro",
+    "outroMusic": "music_outro",
     "musicByLevel": {
         "1": "music_level_1",
         "2": "music_level_2",
@@ -33,6 +35,8 @@
 
     "sounds": {
         "music_menu":          { "src": "assets/sounds/music/Menu_Sound.wav",            "preload": false, "category": "music" },
+        "music_intro":         { "src": "assets/sounds/music/Intro_Sound.wav",           "preload": false, "category": "music" },
+        "music_outro":         { "src": "assets/sounds/music/Outro_Sound.wav",           "preload": false, "category": "music" },
         "music_level_1":       { "src": "assets/sounds/music/1_Level_Sound_01.wav",         "preload": false, "category": "music" },
         "music_level_2":       { "src": "assets/sounds/music/2_Level_Sound_02.wav",         "preload": false, "category": "music" },
         "music_level_3":       { "src": "assets/sounds/music/3_Level_Sound_03.wav",         "preload": false, "category": "music" },

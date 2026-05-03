@@ -27,6 +27,8 @@ import { CakeManager }          from '../logic/CakeManager.js';
 import { BombManager }          from '../logic/BombManager.js';
 import { WarningManager }       from '../logic/WarningManager.js';
 import { Menu }                 from '../ui/Menu.js';
+import { IntroScreen }          from '../ui/IntroScreen.js';
+import { OutroScreen }          from '../ui/OutroScreen.js';
 import { NotificationManager }  from '../ui/NotificationManager.js';
 
 const PLAYER_COLORS = ['#00ccff', '#ff44cc', '#44ff88', '#ffcc00'];
@@ -96,6 +98,8 @@ class Game {
         this._gameTimer = GameConfig.GAME_TIMER_DURATION;
 
         this.menu           = null;
+        this._intro         = null;
+        this._outro         = null;
         this._notifications = null;
         this._playerController = null;
         this._aiControllers    = [];
@@ -114,6 +118,8 @@ class Game {
         this.levels         = new LevelManager(this.sprites);
         this.score          = new ScoreManager(this.levels);
         this.menu           = new Menu(this.canvas, this.input);
+        this._intro         = new IntroScreen(this.canvas, this.input, this.sprites);
+        this._outro         = new OutroScreen(this.canvas, this.input, this.sprites);
         this._notifications = new NotificationManager(document.getElementById('ui-overlay'));
         this._setupEventListeners();
 
@@ -127,15 +133,26 @@ class Game {
 
     _startNewGame() {
         this.menu.deactivate();
+        // Show the intro splash before the first level. Audio transitions to
+        // intro music; level 1 music starts when INTRO_DISMISSED fires.
+        this._intro.activate();
+        this.audio.playIntroMusic();
+        this.state = GameState.INTRO;
+    }
+
+    /**
+     * Transition from the intro screen (or a restart) into active gameplay.
+     * Builds the level, seeds initial state, and emits tutorial notifications.
+     */
+    _startPlaying() {
+        this._intro.deactivate();
         this.levels.reset();
         this.score.reset();
         this._buildLevel();
         // Seed the player controller with the current button state so the
-        // click that dismissed the menu doesn't trigger an immediate shot.
+        // click that dismissed the intro doesn't trigger an immediate shot.
         this._playerController.syncInputState();
         this.state = GameState.PLAYING;
-        // Music: AudioManager listens for MENU_START_GAME and crossfades to
-        // the level-1 track defined by `musicByLevel` in sounds.json.
 
         // Level-start tutorial notifications shown sequentially
         this._notifications.reset();
@@ -146,6 +163,16 @@ class Game {
 
     _setupEventListeners() {
         eventBus.on(GameEvents.MENU_START_GAME, () => this._startNewGame());
+
+        // Intro dismissed → begin actual gameplay (builds level, starts music)
+        eventBus.on(GameEvents.INTRO_DISMISSED, () => this._startPlaying());
+
+        // Outro dismissed → return to main menu
+        eventBus.on(GameEvents.OUTRO_DISMISSED, () => {
+            this._outro.deactivate();
+            this.audio.playMenuMusic();
+            this.state = GameState.MENU;
+        });
 
         eventBus.on(GameEvents.BALL_FELL_IN_HOLE, ({ ball }) => {
             if (ball.hasTag('player')) {
@@ -169,9 +196,11 @@ class Game {
         });
 
         eventBus.on(GameEvents.GAME_VICTORY, () => {
-            this.state = GameState.VICTORY;
-            // AudioManager fades the music out and plays the victory SFX
-            // off its own GAME_VICTORY listener — no STOP_MUSIC needed here.
+            // Show the outro screen with the final session stats. AudioManager
+            // no longer handles this event for music; we crossfade here.
+            this._outro.show(this.score.getSnapshot());
+            this.audio.playOutroMusic();
+            this.state = GameState.OUTRO;
         });
 
         // Per-level transition. The visual cross-fade is handled by
@@ -217,11 +246,14 @@ class Game {
                     this.state = GameState.PLAYING;
                     eventBus.emit(GameEvents.GAME_RESUME);
                 } else if (this.state === GameState.GAME_OVER) {
-                    // ESC from game over restarts the game immediately.
-                    this._startNewGame();
+                    // ESC from game over restarts the game (skips the intro).
+                    this._startPlaying();
+                } else if (this.state === GameState.OUTRO) {
+                    // ESC from the outro returns to the main menu.
+                    eventBus.emit(GameEvents.OUTRO_DISMISSED);
                 }
             } else if (e.code === 'Enter' && this.state === GameState.GAME_OVER) {
-                this._startNewGame();
+                this._startPlaying();
             }
         });
     }
@@ -586,6 +618,10 @@ class Game {
 
         if (this.state === GameState.MENU) {
             this.menu.update(dt);
+        } else if (this.state === GameState.INTRO) {
+            this._intro.update(dt);
+        } else if (this.state === GameState.OUTRO) {
+            this._outro.update(dt);
         } else if (this.state === GameState.PLAYING) {
             this._accumulator += dt;
             const step  = GameConfig.FIXED_TIMESTEP;
@@ -1115,6 +1151,16 @@ class Game {
             return;
         }
 
+        if (this.state === GameState.INTRO) {
+            this._intro.render(ctx);
+            return;
+        }
+
+        if (this.state === GameState.OUTRO) {
+            this._outro.render(ctx);
+            return;
+        }
+
         const spec = this.levels.getRenderSpec();
         this.renderer.drawBackground(spec);
         this.renderer.drawTableBorder({
@@ -1171,7 +1217,6 @@ class Game {
 
         if (this.state === GameState.PAUSED)    this._renderPauseScreen(ctx);
         if (this.state === GameState.GAME_OVER) this._renderGameOverScreen(ctx);
-        if (this.state === GameState.VICTORY)   this._renderVictoryScreen(ctx);
     }
 
     /**
@@ -1249,37 +1294,8 @@ class Game {
         ctx.restore();
     }
 
-    _renderVictoryScreen(ctx) {
-        const W = GameConfig.CANVAS_WIDTH;
-        const H = GameConfig.CANVAS_HEIGHT;
-        ctx.save();
-        ctx.fillStyle = 'rgba(0,15,35,0.82)';
-        ctx.fillRect(0, 0, W, H);
-
-        ctx.fillStyle    = '#ffd700';
-        ctx.font         = `bold 72px 'Courier New'`;
-        ctx.textAlign    = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.shadowColor  = '#ffd700';
-        ctx.shadowBlur   = 30;
-        ctx.fillText('ALL LEVELS CLEAR!', W / 2, H / 2 - 50);
-
-        ctx.shadowBlur   = 0;
-        ctx.fillStyle    = '#ffffff';
-        ctx.font         = `24px 'Courier New'`;
-        const snap = this.score.getSnapshot();
-        ctx.fillText(
-            `★ ${snap.starsCollected} collected  ·  ${snap.enemiesKilled} enemies  ·  ${snap.playerDeaths} deaths`,
-            W / 2, H / 2 + 20
-        );
-
-        ctx.fillStyle = '#aaaaaa';
-        ctx.font      = `16px 'Courier New'`;
-        ctx.fillText(`${snap.starsLost} star${snap.starsLost !== 1 ? 's' : ''} lost to holes`, W / 2, H / 2 + 56);
-
-        ctx.restore();
-    }
 }
+
 
 // ---------------------------------------------------------------------------
 // Module-level helpers
