@@ -393,7 +393,7 @@ export class Menu {
             'PushThemOut 2 — 2026',
             '',
             'Programmer:        silver3310',
-            'Graphics designer: mefeliks2140',
+            'Graphics designer: elivlikswer',
             'Sound designer:    wsocha',
         ];
         let y = 230;
